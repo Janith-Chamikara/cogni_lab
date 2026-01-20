@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Logo from "./logo";
 
 export function Navbar() {
@@ -13,10 +14,11 @@ export function Navbar() {
           <Logo />
         </Link>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+
           <SignedIn>
             <UserButton
-              afterSignOutUrl="/"
               appearance={{
                 elements: {
                   avatarBox: "h-8 w-8",

@@ -59,17 +59,19 @@ const STATUS_CONFIG: Record<
   { color: string; icon: React.ReactNode; label: string }
 > = {
   NOT_STARTED: {
-    color: "bg-slate-100 text-slate-700 border-slate-200",
+    color: "bg-muted text-muted-foreground border-border",
     icon: <Clock className="h-3 w-3" />,
     label: "Not Started",
   },
   IN_PROGRESS: {
-    color: "bg-amber-50 text-amber-700 border-amber-200",
+    color:
+      "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
     icon: <Beaker className="h-3 w-3" />,
     label: "In Progress",
   },
   COMPLETED: {
-    color: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    color:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
     icon: <CheckCircle2 className="h-3 w-3" />,
     label: "Completed",
   },
@@ -110,7 +112,7 @@ export function DashboardClient({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
       <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -129,7 +131,7 @@ export function DashboardClient({
                 placeholder="Search experiments..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-72 bg-white pl-10 shadow-sm"
+                className="w-72 bg-background pl-10 shadow-sm"
               />
             </div>
             <Button
@@ -224,7 +226,7 @@ export function DashboardClient({
         {/* Tabs Section */}
         <Tabs defaultValue="overview" className="space-y-6">
           <div className="flex items-center justify-between">
-            <TabsList className="bg-white shadow-sm">
+            <TabsList className="bg-card shadow-sm">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="my-labs">My Labs</TabsTrigger>
               <TabsTrigger value="modules">Modules</TabsTrigger>
@@ -245,7 +247,7 @@ export function DashboardClient({
           <TabsContent value="overview" className="space-y-6">
             {/* Labs Table Card */}
             <Card className="border-0 shadow-lg">
-              <CardHeader className="border-b bg-slate-50/50 px-6">
+              <CardHeader className="border-b bg-muted/50 px-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-xl">
@@ -269,7 +271,7 @@ export function DashboardClient({
               <CardContent className="p-0">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                    <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead className="w-16 pl-6">#</TableHead>
                       <TableHead>Laboratory</TableHead>
                       <TableHead>Module</TableHead>
@@ -284,8 +286,8 @@ export function DashboardClient({
                       <TableRow>
                         <TableCell colSpan={7} className="h-40">
                           <div className="flex flex-col items-center justify-center gap-3">
-                            <div className="rounded-full bg-slate-100 p-4">
-                              <FlaskConical className="h-8 w-8 text-slate-400" />
+                            <div className="rounded-full bg-muted p-4">
+                              <FlaskConical className="h-8 w-8 text-muted-foreground" />
                             </div>
                             <div className="text-center">
                               <p className="font-medium text-foreground">
@@ -313,7 +315,7 @@ export function DashboardClient({
                         return (
                           <TableRow
                             key={lab.id}
-                            className="group cursor-pointer transition-colors hover:bg-slate-50"
+                            className="group cursor-pointer transition-colors hover:bg-muted/50"
                           >
                             <TableCell className="pl-6 font-mono text-sm text-muted-foreground">
                               {String(index + 1).padStart(2, "0")}
@@ -357,7 +359,7 @@ export function DashboardClient({
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-xs font-medium">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted text-xs font-medium">
                                   {lab._count?.experimentSteps || 0}
                                 </div>
                                 <span className="text-sm text-muted-foreground">
@@ -434,8 +436,8 @@ export function DashboardClient({
                         <Card className="group cursor-pointer transition-all hover:shadow-md">
                           <CardHeader className="pb-2">
                             <div className="flex items-start justify-between">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-violet-100 to-purple-100">
-                                <FlaskConical className="h-5 w-5 text-violet-600" />
+                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                                <FlaskConical className="h-5 w-5 text-primary" />
                               </div>
                               <Badge
                                 variant="outline"
@@ -487,8 +489,8 @@ export function DashboardClient({
                     >
                       <CardHeader>
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-100 to-indigo-100">
-                            <Beaker className="h-5 w-5 text-blue-600" />
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                            <Beaker className="h-5 w-5 text-primary" />
                           </div>
                           <div>
                             <CardTitle className="text-base">

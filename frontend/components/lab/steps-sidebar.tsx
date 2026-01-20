@@ -78,7 +78,6 @@ function StepItem({ step, index, onUpdate, onRemove }: StepItemProps) {
     <div className="group rounded-lg border bg-card p-3 transition-all hover:border-primary/30 hover:shadow-sm">
       <div className="mb-2 flex items-start justify-between">
         <div className="flex items-center gap-2">
-          <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" />
           <span className="text-sm font-medium">
             {step.stepNumber}. {step.stepDescription}
           </span>

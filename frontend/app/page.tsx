@@ -77,14 +77,14 @@ export default function Home() {
           <div className="flex flex-col items-center gap-4">
             <UserButton afterSignOutUrl="/" />
             <button
-              className="rounded-full bg-black px-6 py-2 text-sm font-medium text-white"
+              className="rounded-full bg-primary px-6 py-2 text-sm font-medium text-primary-foreground"
               onClick={callBackend}
               disabled={isLoading}
             >
               {isLoading ? "Calling backend..." : "Call protected backend"}
             </button>
             {backendResponse && (
-              <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">
+              <div className="rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground shadow-sm">
                 {backendResponse}
               </div>
             )}

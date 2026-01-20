@@ -118,7 +118,7 @@ function PlacedEquipmentItem({
 
   return (
     <div
-      className="group absolute cursor-move rounded-lg border-2 border-transparent bg-white p-2 shadow-md transition-all hover:border-primary hover:shadow-lg"
+      className="group absolute cursor-move rounded-lg border-2 border-transparent bg-card p-2 shadow-md transition-all hover:border-primary hover:shadow-lg"
       style={{
         left: placement.positionX,
         top: placement.positionY,

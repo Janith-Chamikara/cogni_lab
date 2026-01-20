@@ -32,6 +32,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTheme } from "next-themes";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
@@ -81,29 +82,29 @@ function EquipmentNode({
         type="target"
         position={Position.Left}
         id="left"
-        className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-white"
+        className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-background"
       />
       <Handle
         type="target"
         position={Position.Top}
         id="top"
-        className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-white"
+        className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-background"
       />
       <Handle
         type="source"
         position={Position.Right}
         id="right"
-        className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-white"
+        className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-background"
       />
       <Handle
         type="source"
         position={Position.Bottom}
         id="bottom"
-        className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-white"
+        className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-background"
       />
 
       {/* Equipment card */}
-      <div className="flex h-[120px] w-[120px] flex-col items-center justify-center rounded-lg border-2 border-slate-200 bg-white p-2 shadow-md transition-all hover:border-primary hover:shadow-lg">
+      <div className="flex h-[120px] w-[120px] flex-col items-center justify-center rounded-lg border-2 border-border bg-card p-2 shadow-md transition-all hover:border-primary hover:shadow-lg">
         {imageUrl ? (
           <div className="relative h-16 w-16">
             <Image
@@ -114,11 +115,11 @@ function EquipmentNode({
             />
           </div>
         ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded bg-slate-100">
-            <ImageIcon className="h-8 w-8 text-slate-400" />
+          <div className="flex h-16 w-16 items-center justify-center rounded bg-muted">
+            <ImageIcon className="h-8 w-8 text-muted-foreground" />
           </div>
         )}
-        <p className="mt-1 w-full truncate text-center text-xs font-medium text-slate-700">
+        <p className="mt-1 w-full truncate text-center text-xs font-medium text-foreground">
           {data.equipment.equipmentName}
         </p>
       </div>
@@ -187,6 +188,7 @@ function CircuitCanvasInner({
     WIRE_COLORS[0].value,
   );
   const [isWireMode, setIsWireMode] = useState(false);
+  const theme = useTheme();
 
   // Convert placed equipments to React Flow nodes
   const initialNodes: Node[] = useMemo(
@@ -334,7 +336,11 @@ function CircuitCanvasInner({
         (eq) => (eq.id || `temp-${placedEquipments.indexOf(eq)}`) === node.id,
       );
       if (index !== -1) {
-        onEquipmentMove(index, Math.round(node.position.x), Math.round(node.position.y));
+        onEquipmentMove(
+          index,
+          Math.round(node.position.x),
+          Math.round(node.position.y),
+        );
       }
     },
     [placedEquipments, onEquipmentMove],
@@ -359,15 +365,18 @@ function CircuitCanvasInner({
         y: event.clientY,
       });
 
-      onEquipmentDrop(equipmentId, Math.round(position.x), Math.round(position.y));
+      onEquipmentDrop(
+        equipmentId,
+        Math.round(position.x),
+        Math.round(position.y),
+      );
     },
     [screenToFlowPosition, onEquipmentDrop],
   );
 
   return (
     <div className="flex h-full flex-col">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 border-b bg-white px-4 py-2">
+      <div className="flex items-center gap-2 border-b bg-card px-4 py-2">
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -398,8 +407,8 @@ function CircuitCanvasInner({
                   key={color.value}
                   className={`h-6 w-6 rounded-full border-2 transition-all ${
                     selectedWireColor === color.value
-                      ? "border-slate-900 ring-2 ring-slate-400"
-                      : "border-transparent hover:border-slate-300"
+                      ? "border-foreground ring-2 ring-ring"
+                      : "border-transparent hover:border-muted-foreground"
                   }`}
                   style={{ backgroundColor: color.value }}
                   onClick={() => setSelectedWireColor(color.value)}
@@ -417,7 +426,6 @@ function CircuitCanvasInner({
         </div>
       </div>
 
-      {/* React Flow Canvas */}
       <div className="flex-1" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
@@ -433,22 +441,24 @@ function CircuitCanvasInner({
           connectionLineType={ConnectionLineType.SmoothStep}
           connectionLineStyle={{ stroke: selectedWireColor, strokeWidth: 2 }}
           fitView
+          colorMode={
+            theme.theme === "dark"
+              ? "dark"
+              : theme.theme === "light"
+                ? "light"
+                : "system"
+          }
           snapToGrid
           snapGrid={[20, 20]}
           deleteKeyCode={["Backspace", "Delete"]}
           className={isWireMode ? "cursor-crosshair" : ""}
         >
-          <Controls />
-          <MiniMap
-            nodeColor={() => "#6366f1"}
-            maskColor="rgba(0,0,0,0.1)"
-            className="!bg-slate-50"
-          />
+          <Controls className="bg-background text-foreground" />
+          <MiniMap />
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         </ReactFlow>
       </div>
 
-      {/* Empty state */}
       {placedEquipments.length === 0 && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
           <div className="text-center text-muted-foreground">
@@ -463,7 +473,6 @@ function CircuitCanvasInner({
   );
 }
 
-// Wrapper with ReactFlowProvider
 export function CircuitCanvas(props: CircuitCanvasProps) {
   return (
     <ReactFlowProvider>

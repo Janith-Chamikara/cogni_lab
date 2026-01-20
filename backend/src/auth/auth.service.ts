@@ -36,7 +36,7 @@ export class AuthService {
   }
 
   private getWebhookUsername(clerkUser: ClerkWebhookUser) {
-    return clerkUser.username ?? `clerk_${clerkUser.id.slice(0, 8)}`;
+    return clerkUser.username ?? `clerk_${clerkUser.id}`;
   }
 
   async syncClerkUser(clerkUser: ClerkUser) {
@@ -44,7 +44,7 @@ export class AuthService {
     const fullName =
       [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') ||
       null;
-    const username = clerkUser.username ?? `clerk_${clerkUser.id.slice(0, 8)}`;
+    const username = clerkUser.username ?? `clerk_${clerkUser.id}`;
 
     if (!email) {
       return null;

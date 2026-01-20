@@ -31,7 +31,7 @@ function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
     <div
       draggable
       onDragStart={handleDragStart}
-      className="flex cursor-grab flex-col items-center rounded-lg border bg-white p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing"
+      className="flex cursor-grab flex-col items-center rounded-lg border bg-card p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing"
     >
       {imageUrl ? (
         <div className="relative h-12 w-12">
@@ -43,8 +43,8 @@ function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
           />
         </div>
       ) : (
-        <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100">
-          <ImageIcon className="h-6 w-6 text-slate-400" />
+        <div className="flex h-12 w-12 items-center justify-center rounded bg-muted">
+          <ImageIcon className="h-6 w-6 text-muted-foreground" />
         </div>
       )}
       <p className="mt-2 w-full truncate text-center text-xs font-medium">

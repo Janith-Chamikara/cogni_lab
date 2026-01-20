@@ -16,6 +16,7 @@ import {
   LabStats,
   Module,
   UpdateLabPayload,
+  WireConnection,
 } from "./types";
 
 const getAuthToken = async () => {
@@ -377,5 +378,33 @@ export const deleteLab = async (id: string): Promise<ActionResult<void>> => {
   } catch (error) {
     console.error(error);
     return { error: getErrorMessage(error, "Failed to delete lab.") };
+  }
+};
+
+export const updateLabConnections = async (
+  id: string,
+  connections: Omit<WireConnection, "id" | "labId">[],
+): Promise<ActionResult<Lab>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to update lab connections." };
+    }
+
+    const response = await api.put<Lab>(
+      `/labs/${id}/connections`,
+      { connections },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return {
+      error: getErrorMessage(error, "Failed to update lab connections."),
+    };
   }
 };

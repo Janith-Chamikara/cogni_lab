@@ -86,6 +86,7 @@ model LabInstance {
   experimentSteps     ExperimentStep[]
   experimentProgress  ExperimentProgress[]
   labEquipments LabInstanceEquipment[]
+  wireConnections WireConnection[]
 
   @@map("lab_instances")
 }
@@ -101,6 +102,29 @@ model LabInstanceEquipment {
   
   lab LabInstance @relation(fields: [labId], references: [id], onDelete: Cascade)
   equipment LabEquipment @relation(fields: [equipmentId], references: [id])
+  
+  // Wire connections
+  outgoingConnections WireConnection[] @relation("SourceEquipment")
+  incomingConnections WireConnection[] @relation("TargetEquipment")
+}
+
+// Wire connections between equipment
+model WireConnection {
+  id String @id @default(uuid())
+  labId String
+  sourceEquipmentId String
+  targetEquipmentId String
+  sourceHandle String? // e.g., "anode", "cathode", "output"
+  targetHandle String? // e.g., "input", "positive", "negative"
+  wireColor String @default("#374151")
+  
+  createdAt DateTime @default(now())
+  
+  lab LabInstance @relation(fields: [labId], references: [id], onDelete: Cascade)
+  sourceEquipment LabInstanceEquipment @relation("SourceEquipment", fields: [sourceEquipmentId], references: [id], onDelete: Cascade)
+  targetEquipment LabInstanceEquipment @relation("TargetEquipment", fields: [targetEquipmentId], references: [id], onDelete: Cascade)
+  
+  @@map("wire_connections")
 }
 
 model LabEquipment {

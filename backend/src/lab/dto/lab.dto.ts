@@ -147,3 +147,30 @@ export class UpdateLabStepsDto {
   @Type(() => ExperimentStepDto)
   steps: ExperimentStepDto[];
 }
+
+export class WireConnectionDto {
+  @IsString()
+  sourceEquipmentId: string;
+
+  @IsString()
+  targetEquipmentId: string;
+
+  @IsOptional()
+  @IsString()
+  sourceHandle?: string;
+
+  @IsOptional()
+  @IsString()
+  targetHandle?: string;
+
+  @IsOptional()
+  @IsString()
+  wireColor?: string;
+}
+
+export class UpdateWireConnectionsDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WireConnectionDto)
+  connections: WireConnectionDto[];
+}

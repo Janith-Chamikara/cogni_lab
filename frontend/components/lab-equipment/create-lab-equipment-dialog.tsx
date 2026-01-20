@@ -4,11 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Upload, X } from "lucide-react";
-import {
-  createLabEquipment,
-  type CreateLabEquipmentPayload,
-  type LabEquipment,
-} from "@/lib/actions";
+
 import {
   labEquipmentSchema,
   type LabEquipmentFormValues,
@@ -39,6 +35,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { CreateLabEquipmentPayload, LabEquipment } from "@/lib/types";
+import { createLabEquipment } from "@/lib/actions";
 
 type CreateLabEquipmentDialogProps = {
   open: boolean;

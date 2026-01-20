@@ -17,6 +17,7 @@ import {
   UpdateLabDto,
   UpdateLabEquipmentsDto,
   UpdateLabStepsDto,
+  UpdateWireConnectionsDto,
 } from './dto/lab.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -93,6 +94,14 @@ export class LabController {
   @Put(':id/steps')
   async updateSteps(@Param('id') id: string, @Body() dto: UpdateLabStepsDto) {
     return this.labService.updateSteps(id, dto);
+  }
+
+  @Put(':id/connections')
+  async updateConnections(
+    @Param('id') id: string,
+    @Body() dto: UpdateWireConnectionsDto,
+  ) {
+    return this.labService.updateConnections(id, dto);
   }
 
   @Delete(':id')

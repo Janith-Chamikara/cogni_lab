@@ -5,6 +5,7 @@ import {
   UpdateLabDto,
   UpdateLabEquipmentsDto,
   UpdateLabStepsDto,
+  UpdateWireConnectionsDto,
 } from './dto/lab.dto';
 
 @Injectable()
@@ -117,6 +118,16 @@ export class LabService {
                 },
               },
             },
+          },
+        },
+        wireConnections: {
+          select: {
+            id: true,
+            sourceEquipmentId: true,
+            targetEquipmentId: true,
+            sourceHandle: true,
+            targetHandle: true,
+            wireColor: true,
           },
         },
         experimentSteps: {
@@ -305,5 +316,56 @@ export class LabService {
       activeLabs,
       totalProgress,
     };
+  }
+
+  async updateConnections(id: string, dto: UpdateWireConnectionsDto) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      include: {
+        labEquipments: true,
+      },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    // Get equipment IDs map for validation
+    const equipmentIds = new Set(lab.labEquipments.map((eq) => eq.id));
+
+    // Validate all connections reference valid equipment
+    for (const conn of dto.connections) {
+      if (!equipmentIds.has(conn.sourceEquipmentId)) {
+        throw new NotFoundException(
+          `Source equipment ${conn.sourceEquipmentId} not found in lab`,
+        );
+      }
+      if (!equipmentIds.has(conn.targetEquipmentId)) {
+        throw new NotFoundException(
+          `Target equipment ${conn.targetEquipmentId} not found in lab`,
+        );
+      }
+    }
+
+    // Delete existing connections
+    await this.prisma.wireConnection.deleteMany({
+      where: { labId: id },
+    });
+
+    // Create new connections
+    if (dto.connections.length > 0) {
+      await this.prisma.wireConnection.createMany({
+        data: dto.connections.map((conn) => ({
+          labId: id,
+          sourceEquipmentId: conn.sourceEquipmentId,
+          targetEquipmentId: conn.targetEquipmentId,
+          sourceHandle: conn.sourceHandle,
+          targetHandle: conn.targetHandle,
+          wireColor: conn.wireColor ?? '#374151',
+        })),
+      });
+    }
+
+    return this.findOne(id);
   }
 }

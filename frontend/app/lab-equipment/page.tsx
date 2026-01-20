@@ -5,8 +5,8 @@ import { getLabEquipments } from "@/lib/actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { CreateLabEquipmentDialog } from "@/components/create-lab-equipment-dialog";
-import { LabEquipmentCard } from "@/components/lab-equipment-card";
+import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
+import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { LabEquipment } from "@/lib/types";
 
 export default function LabEquipmentPage() {

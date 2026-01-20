@@ -78,6 +78,17 @@ export type ExperimentStep = {
   createdAt?: string;
 };
 
+// Wire connection types
+export type WireConnection = {
+  id?: string;
+  labId?: string;
+  sourceEquipmentId: string;
+  targetEquipmentId: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
+  wireColor?: string;
+};
+
 export type Lab = {
   id: string;
   instructorId: string;
@@ -101,6 +112,7 @@ export type Lab = {
     moduleCode?: string | null;
   };
   labEquipments?: EquipmentPlacement[];
+  wireConnections?: WireConnection[];
   experimentSteps?: ExperimentStep[];
   _count?: {
     experimentSteps: number;

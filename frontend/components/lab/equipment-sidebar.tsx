@@ -2,17 +2,57 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { useDraggable } from "@dnd-kit/core";
-import { Search } from "lucide-react";
+import { Search, ImageIcon } from "lucide-react";
 import { LabEquipment } from "@/lib/types";
 import { Input } from "@/components/ui/input";
-import { DraggableEquipment } from "./draggable-equipment";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+
+const getCloudinaryUrl = (publicId?: string | null) => {
+  if (!publicId || !cloudinaryCloudName) {
+    return null;
+  }
+  return `https://res.cloudinary.com/${cloudinaryCloudName}/image/upload/${publicId}`;
+};
 
 type EquipmentSidebarProps = {
   equipments: LabEquipment[];
 };
+
+function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
+  const imageUrl = getCloudinaryUrl(equipment.imageUrl);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData("application/equipment", equipment.id);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  return (
+    <div
+      draggable
+      onDragStart={handleDragStart}
+      className="flex cursor-grab flex-col items-center rounded-lg border bg-white p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing"
+    >
+      {imageUrl ? (
+        <div className="relative h-12 w-12">
+          <Image
+            src={imageUrl}
+            alt={equipment.equipmentName}
+            fill
+            className="object-contain"
+          />
+        </div>
+      ) : (
+        <div className="flex h-12 w-12 items-center justify-center rounded bg-slate-100">
+          <ImageIcon className="h-6 w-6 text-slate-400" />
+        </div>
+      )}
+      <p className="mt-2 w-full truncate text-center text-xs font-medium">
+        {equipment.equipmentName}
+      </p>
+    </div>
+  );
+}
 
 export function EquipmentSidebar({ equipments }: EquipmentSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,7 +84,7 @@ export function EquipmentSidebar({ equipments }: EquipmentSidebarProps) {
         </h3>
         <div className="grid grid-cols-2 gap-3">
           {filteredEquipments.map((equipment) => (
-            <DraggableEquipment key={equipment.id} equipment={equipment} />
+            <DraggableSidebarItem key={equipment.id} equipment={equipment} />
           ))}
         </div>
 

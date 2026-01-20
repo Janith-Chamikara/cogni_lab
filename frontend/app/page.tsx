@@ -3,6 +3,7 @@
 import { SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Footer } from "@/components/footer";
 import { FlaskConical, Zap, Bot, Cloud } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -121,6 +122,9 @@ export default function Home() {
             })}
           </div>
         </section>
+
+        {/* Footer */}
+        <Footer />
       </div>
     </div>
   );

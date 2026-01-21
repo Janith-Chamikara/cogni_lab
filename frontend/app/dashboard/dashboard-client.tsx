@@ -140,6 +140,31 @@ export function DashboardClient({
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
       <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
+        {/* Hero Welcome Section */}
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-r from-blue-600/90 to-purple-600/90 px-8 py-12 text-white shadow-lg">
+          <div className="absolute inset-0 opacity-10">
+            <div className="absolute right-0 top-0 h-40 w-40 bg-white/20 rounded-full -mr-20 -mt-20" />
+            <div className="absolute left-0 bottom-0 h-32 w-32 bg-white/20 rounded-full -ml-16 -mb-16" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <h1 className="text-4xl font-bold tracking-tight">Welcome back!</h1>
+                <p className="mt-2 text-blue-100">You have {stats.totalLabs} labs with {stats.activeLabs} active experiments</p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setIsCreateOpen(true)}
+                  className="gap-2 bg-white text-blue-600 hover:bg-blue-50"
+                >
+                  <Plus className="h-4 w-4" />
+                  New Lab
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

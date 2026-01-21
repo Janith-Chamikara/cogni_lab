@@ -18,8 +18,11 @@ import {
   Beaker,
   Clock,
   CheckCircle2,
+  Wrench,
 } from "lucide-react";
-import { Lab, LabStats, Module } from "@/lib/types";
+import { Lab, LabEquipment, LabStats, Module } from "@/lib/types";
+import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
+import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -51,6 +54,7 @@ type DashboardClientProps = {
   initialLabs: Lab[];
   initialStats: LabStats;
   modules: Module[];
+  initialEquipments: LabEquipment[];
   error?: string;
 };
 
@@ -81,12 +85,16 @@ export function DashboardClient({
   initialLabs,
   initialStats,
   modules,
+  initialEquipments,
   error,
 }: DashboardClientProps) {
   const [labs, setLabs] = useState(initialLabs);
   const [stats, setStats] = useState(initialStats);
+  const [equipments, setEquipments] = useState(initialEquipments);
   const [searchQuery, setSearchQuery] = useState("");
+  const [equipmentSearchQuery, setEquipmentSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false);
 
   const filteredLabs = labs.filter(
     (lab) =>
@@ -99,6 +107,24 @@ export function DashboardClient({
     setStats({ ...stats, totalLabs: stats.totalLabs + 1 });
     setIsCreateOpen(false);
   };
+
+  const handleEquipmentCreated = (equipment: LabEquipment) => {
+    setEquipments([equipment, ...equipments]);
+    setIsCreateEquipmentOpen(false);
+  };
+
+  const filteredEquipments = equipments.filter(
+    (eq) =>
+      eq.equipmentName
+        .toLowerCase()
+        .includes(equipmentSearchQuery.toLowerCase()) ||
+      eq.equipmentType
+        .toLowerCase()
+        .includes(equipmentSearchQuery.toLowerCase()) ||
+      eq.description
+        ?.toLowerCase()
+        .includes(equipmentSearchQuery.toLowerCase()),
+  );
 
   if (error) {
     return (
@@ -229,6 +255,7 @@ export function DashboardClient({
             <TabsList className="bg-card shadow-sm">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="my-labs">My Labs</TabsTrigger>
+              <TabsTrigger value="equipment">Equipment</TabsTrigger>
               <TabsTrigger value="modules">Modules</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
             </TabsList>
@@ -472,6 +499,77 @@ export function DashboardClient({
             </Card>
           </TabsContent>
 
+          <TabsContent value="equipment">
+            <Card className="border-0 shadow-lg">
+              <CardHeader className="border-b bg-muted/50">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-xl">Lab Equipment</CardTitle>
+                    <CardDescription>
+                      Manage equipment for your virtual laboratories
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search equipment..."
+                        value={equipmentSearchQuery}
+                        onChange={(e) =>
+                          setEquipmentSearchQuery(e.target.value)
+                        }
+                        className="w-64 bg-background pl-10"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => setIsCreateEquipmentOpen(true)}
+                      className="gap-2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Equipment
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {filteredEquipments.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="rounded-full bg-muted p-4">
+                      <Wrench className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="mt-4 font-medium text-foreground">
+                      No equipment found
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {equipmentSearchQuery
+                        ? "Try a different search term"
+                        : "Add your first equipment to get started"}
+                    </p>
+                    {!equipmentSearchQuery && (
+                      <Button
+                        size="sm"
+                        onClick={() => setIsCreateEquipmentOpen(true)}
+                        className="mt-4 gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Add Equipment
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredEquipments.map((equipment) => (
+                      <LabEquipmentCard
+                        key={equipment.id}
+                        equipment={equipment}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="modules">
             <Card className="border-0 shadow-lg">
               <CardHeader>
@@ -548,6 +646,13 @@ export function DashboardClient({
         onOpenChange={setIsCreateOpen}
         modules={modules}
         onCreated={handleLabCreated}
+      />
+
+      {/* Create Equipment Dialog */}
+      <CreateLabEquipmentDialog
+        open={isCreateEquipmentOpen}
+        onOpenChange={setIsCreateEquipmentOpen}
+        onCreated={handleEquipmentCreated}
       />
     </div>
   );

@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useUser } from "@clerk/nextjs";
-import { Loader2 } from "lucide-react";
-import { createLab } from "@/lib/actions";
+import { Loader2, Plus } from "lucide-react";
+import { createLab, createModule } from "@/lib/actions";
 import { Lab, Module } from "@/lib/types";
 import { createLabStep1Schema, CreateLabStep1Values } from "@/lib/schemas/lab";
 import {
@@ -109,9 +109,8 @@ export function CreateLabDialog({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* Status and Category Row */}
-            <div className="grid grid-cols-2 gap-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
               <FormField
                 control={form.control}
                 name="status"
@@ -123,7 +122,7 @@ export function CreateLabDialog({
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                       </FormControl>
@@ -149,7 +148,7 @@ export function CreateLabDialog({
                       defaultValue={field.value}
                     >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select category" />
                         </SelectTrigger>
                       </FormControl>
@@ -165,122 +164,120 @@ export function CreateLabDialog({
                   </FormItem>
                 )}
               />
-            </div>
 
-            {/* Module Selection */}
-            <FormField
-              control={form.control}
-              name="moduleId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Module</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select module" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {modules.length === 0 ? (
-                        <SelectItem value="none" disabled>
-                          No modules available
-                        </SelectItem>
-                      ) : (
-                        modules.map((mod) => (
-                          <SelectItem key={mod.id} value={mod.id}>
-                            {mod.moduleName}
-                            {mod.moduleCode && ` (${mod.moduleCode})`}
+              <FormField
+                control={form.control}
+                name="moduleId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Module</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select module" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {modules.length === 0 ? (
+                          <SelectItem value="none" disabled>
+                            No modules available
                           </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                        ) : (
+                          modules.map((mod) => (
+                            <SelectItem key={mod.id} value={mod.id}>
+                              {mod.moduleName}
+                              {mod.moduleCode && ` (${mod.moduleCode})`}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Lab Name */}
-            <FormField
-              control={form.control}
-              name="labName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Lab name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Enter lab name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="createdAt"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Created at</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Created At */}
-            <FormField
-              control={form.control}
-              name="createdAt"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Created at</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="labName"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Lab name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter lab name" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Instructor Name */}
-            <FormField
-              control={form.control}
-              name="instructorName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instructor Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Instructor name" {...field} disabled />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="instructorName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Instructor Name</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="Instructor name"
+                        {...field}
+                        disabled
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Contact No */}
-            <FormField
-              control={form.control}
-              name="contactNo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact No</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+94-XXXXXXXXX" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="contactNo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Contact No</FormLabel>
+                    <FormControl>
+                      <Input placeholder="+94-XXXXXXXXX" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Description */}
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Lab Description</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Please include all relevant information to your lab."
-                      className="min-h-20"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="col-span-2">
+                    <FormLabel>Lab Description</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Please include all relevant information to your lab."
+                        className="min-h-16"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
 

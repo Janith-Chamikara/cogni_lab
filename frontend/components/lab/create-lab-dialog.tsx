@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useUser } from "@clerk/nextjs";
-import { Loader2 } from "lucide-react";
-import { createLab } from "@/lib/actions";
+import { Loader2, Plus } from "lucide-react";
+import { createLab, createModule } from "@/lib/actions";
 import { Lab, Module } from "@/lib/types";
 import { createLabStep1Schema, CreateLabStep1Values } from "@/lib/schemas/lab";
 import {

@@ -16,6 +16,12 @@ export class AiService {
       throw new InternalServerErrorException('Missing OPENROUTER_API_KEY.');
     }
 
+    const appUrl =
+      process.env.OPENROUTER_APP_URL ??
+      process.env.FRONTEND_URL ??
+      'http://localhost:3000';
+    const appName = process.env.OPENROUTER_APP_NAME ?? 'Cogni Lab';
+
     const response = await fetch(
       'https://openrouter.ai/api/v1/chat/completions',
       {
@@ -23,6 +29,8 @@ export class AiService {
         headers: {
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
+          'HTTP-Referer': appUrl,
+          'X-Title': appName,
         },
         body: JSON.stringify({
           model,

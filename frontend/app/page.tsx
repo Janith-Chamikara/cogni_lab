@@ -45,20 +45,20 @@ export default function Home() {
           backgroundRepeat: 'no-repeat',
         }}
       >
-        <div className="absolute inset-0 bg-black/75" />
+        <div className="absolute inset-0 bg-black/75 dark:bg-black/60" />
       </div>
 
       {/* Content */}
       <div className="relative z-10">
         {/* Hero Section */}
         <section className="container mx-auto px-8 md:px-16 pt-32 pb-32 min-h-[70vh] flex flex-col justify-center">
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 tracking-tight max-w-4xl">
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white dark:text-foreground mb-6 tracking-tight max-w-4xl">
             EXPERIMENT SMARTER
             <br />
             WITH AI
           </h1>
           
-          <p className="text-lg md:text-xl text-gray-300 mb-8 max-w-xl">
+          <p className="text-lg md:text-xl text-gray-300 dark:text-muted-foreground mb-8 max-w-xl">
             Experience the next generation of hands-on learning - guided by your
             <br/>
             virtual AI lab assistant.
@@ -70,14 +70,14 @@ export default function Home() {
           <div className="flex flex-col sm:flex-row gap-4">
             <SignedOut>
               <SignUpButton mode="modal">
-                <Button size="lg" className="bg-white hover:bg-gray-100 text-black px-8 py-6 text-base font-semibold rounded-full w-fit">
+                <Button size="lg" className="bg-white hover:bg-gray-100 text-black dark:bg-primary dark:hover:bg-primary/90 dark:text-primary-foreground px-8 py-6 text-base font-semibold rounded-full w-fit">
                   START EXPERIMENTING...
                 </Button>
               </SignUpButton>
               <Button 
                 size="lg" 
                 variant="outline" 
-                className="bg-transparent border-2 border-white text-white hover:bg-white/10 px-8 py-6 text-base font-semibold rounded-full w-fit"
+                className="bg-transparent border-2 border-white text-white hover:bg-white/10 dark:border-border dark:text-foreground dark:hover:bg-accent px-8 py-6 text-base font-semibold rounded-full w-fit"
                 onClick={() => router.push('/labs')}
               >
                 LEARN MORE
@@ -104,16 +104,16 @@ export default function Home() {
               return (
                 <Card
                   key={index}
-                  className="bg-white/10 backdrop-blur-md border-white/20 p-6 hover:bg-white/20 transition-all duration-300 group cursor-pointer"
+                  className="bg-white/10 backdrop-blur-md border-white/20 dark:bg-card/50 dark:border-border p-6 hover:bg-white/20 dark:hover:bg-card/70 transition-all duration-300 group cursor-pointer"
                 >
                   <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="p-4 rounded-full bg-blue-500/20 group-hover:bg-blue-500/30 transition-colors">
-                      <Icon className="w-8 h-8 text-blue-400" />
+                    <div className="p-4 rounded-full bg-blue-500/20 group-hover:bg-blue-500/30 dark:bg-primary/20 dark:group-hover:bg-primary/30 transition-colors">
+                      <Icon className="w-8 h-8 text-blue-400 dark:text-primary" />
                     </div>
-                    <h3 className="text-white font-bold text-lg tracking-wide">
+                    <h3 className="text-white dark:text-foreground font-bold text-lg tracking-wide">
                       {feature.title}
                     </h3>
-                    <p className="text-gray-300 text-sm">
+                    <p className="text-gray-300 dark:text-muted-foreground text-sm">
                       {feature.description}
                     </p>
                   </div>

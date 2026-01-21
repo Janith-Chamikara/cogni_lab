@@ -1,8 +1,8 @@
 import {
   getLabEquipments,
   getLabStats,
+  getModules,
   getMyLabs,
-  getMyModules,
 } from "@/lib/actions";
 import { DashboardClient } from "./dashboard-client";
 
@@ -11,7 +11,7 @@ export default async function DashboardPage() {
     await Promise.all([
       getMyLabs(),
       getLabStats(),
-      getMyModules(),
+      getModules(), // Fetch all modules so users can create labs in any module
       getLabEquipments(),
     ]);
 

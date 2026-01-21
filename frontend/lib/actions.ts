@@ -408,3 +408,18 @@ export const updateLabConnections = async (
     };
   }
 };
+
+export const getLabCatalog = async (): Promise<ActionResult<Lab[]>> => {
+  try {
+    const token = await getAuthToken();
+
+    const response = await api.get<Lab[]>("/labs/catalog", {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load lab catalog.") };
+  }
+};

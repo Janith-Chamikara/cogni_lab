@@ -7,6 +7,7 @@ import { ClerkAuthGuard } from './auth/guards/clerk-auth.guard';
 import { LabEquipmentModule } from './lab-equipment/lab-equipment.module';
 import { ModuleModule } from './module/module.module';
 import { LabModule } from './lab/lab.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { LabModule } from './lab/lab.module';
     LabEquipmentModule,
     ModuleModule,
     LabModule,
+    AiModule,
   ],
   providers: [
     ClerkClientProvider,

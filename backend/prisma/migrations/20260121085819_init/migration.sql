@@ -5,7 +5,7 @@ CREATE TABLE "users" (
     "username" TEXT,
     "email" TEXT NOT NULL,
     "passwordHash" TEXT,
-    "userType" TEXT NOT NULL,
+    "userType" TEXT,
     "fullName" TEXT,
     "university" TEXT,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -55,15 +55,32 @@ CREATE TABLE "LabInstanceEquipment" (
 );
 
 -- CreateTable
+CREATE TABLE "wire_connections" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "labId" TEXT NOT NULL,
+    "sourceEquipmentId" TEXT NOT NULL,
+    "targetEquipmentId" TEXT NOT NULL,
+    "sourceHandle" TEXT,
+    "targetHandle" TEXT,
+    "wireColor" TEXT NOT NULL DEFAULT '#374151',
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "wire_connections_labId_fkey" FOREIGN KEY ("labId") REFERENCES "lab_instances" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "wire_connections_sourceEquipmentId_fkey" FOREIGN KEY ("sourceEquipmentId") REFERENCES "LabInstanceEquipment" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT "wire_connections_targetEquipmentId_fkey" FOREIGN KEY ("targetEquipmentId") REFERENCES "LabInstanceEquipment" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+-- CreateTable
 CREATE TABLE "lab_equipment" (
     "id" TEXT NOT NULL PRIMARY KEY,
+    "creatorId" TEXT NOT NULL,
     "equipmentType" TEXT NOT NULL,
     "equipmentName" TEXT NOT NULL,
     "description" TEXT,
     "supportsConfiguration" BOOLEAN NOT NULL DEFAULT false,
     "defaultConfigJson" JSONB,
     "imageUrl" TEXT,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "lab_equipment_creatorId_fkey" FOREIGN KEY ("creatorId") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- CreateTable

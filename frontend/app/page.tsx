@@ -184,27 +184,35 @@ export default function Home() {
           </SignedOut>
 
           <SignedIn>
-            <button
-              onClick={() => router.push("/dashboard")}
-              className="group relative overflow-hidden rounded-full bg-black px-10 py-4 text-sm font-medium tracking-wide text-white transition-all duration-300 hover:shadow-2xl dark:bg-white dark:text-black"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                Go to Dashboard
-                <svg
-                  className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 8l4 4m0 0l-4 4m4-4H3"
-                  />
-                </svg>
-              </span>
-            </button>
+            <div className="flex flex-col items-center gap-4 sm:flex-row">
+              <button
+                onClick={() => router.push("/dashboard")}
+                className="group relative overflow-hidden rounded-full bg-black px-10 py-4 text-sm font-medium tracking-wide text-white transition-all duration-300 hover:shadow-2xl dark:bg-white dark:text-black"
+              >
+                <span className="relative z-10 flex items-center gap-2">
+                  Go to Dashboard
+                  <svg
+                    className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 8l4 4m0 0l-4 4m4-4H3"
+                    />
+                  </svg>
+                </span>
+              </button>
+              <button
+                onClick={() => router.push("/modules")}
+                className="group rounded-full border border-gray-300 bg-transparent px-8 py-4 text-sm font-medium tracking-wide text-gray-800 transition-all duration-300 hover:border-black hover:bg-black hover:text-white dark:border-gray-700 dark:text-gray-200 dark:hover:border-white dark:hover:bg-white dark:hover:text-black"
+              >
+                View Modules
+              </button>
+            </div>
           </SignedIn>
         </div>
 

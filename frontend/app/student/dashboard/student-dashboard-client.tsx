@@ -60,55 +60,55 @@ export function StudentDashboardClient({
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card style={{ backgroundColor: '#2872db' }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
+            <CardTitle className="text-sm font-medium text-white">
               Available Labs
             </CardTitle>
-            <FlaskConical className="h-4 w-4 text-muted-foreground" />
+            <FlaskConical className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.available}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{stats.available}</div>
+            <p className="text-xs text-white/80">
               Ready to start
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card style={{ backgroundColor: '#a52b2b' }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">In Progress</CardTitle>
+            <Clock className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.inProgress}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{stats.inProgress}</div>
+            <p className="text-xs text-white/80">
               Currently working on
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card style={{ backgroundColor: '#b78407' }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Completed</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{stats.completed}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{stats.completed}</div>
+            <p className="text-xs text-white/80">
               Successfully finished
             </p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card style={{ backgroundColor: '#309053' }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Modules</CardTitle>
-            <BookOpen className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-white">Modules</CardTitle>
+            <BookOpen className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{initialModules.length}</div>
-            <p className="text-xs text-muted-foreground">
+            <div className="text-2xl font-bold text-white">{initialModules.length}</div>
+            <p className="text-xs text-white/80">
               Course modules
             </p>
           </CardContent>

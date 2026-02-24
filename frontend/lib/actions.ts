@@ -49,25 +49,41 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
 };
 
 export const completeOnboarding = async (formData: OnboardingFormValues) => {
+  console.log("[Server] completeOnboarding called with:", formData);
+  
   const { userId } = await auth();
+  console.log("[Server] User ID:", userId);
 
   if (!userId) {
+    console.error("[Server] No logged in user");
     return { error: "No logged in user" };
   }
 
   const client = await clerkClient();
 
   try {
-    await client.users.updateUser(userId, {
+    console.log("[Server] Updating user metadata...");
+    await client.users.updateUser(userId,{
       publicMetadata: {
         onboardingComplete: true,
         role: formData.role,
         institution: formData.institution,
       },
     });
-    return { message: "Onboarding complete" };
+    console.log("[Server] User metadata updated successfully");
+    
+    // Force session to refresh by updating Clerk user
+    await client.users.updateUserMetadata(userId, {
+      publicMetadata: {
+        onboardingComplete: true,
+        role: formData.role,
+        institution: formData.institution,
+      },
+    });
+    
+    return { message: "Onboarding complete", success: true };
   } catch (err) {
-    console.error(err);
+    console.error("[Server] Error updating user metadata:", err);
     return { error: "There was an error updating the user metadata." };
   }
 };
@@ -228,6 +244,22 @@ export const getMyLabs = async (): Promise<ActionResult<Lab[]>> => {
   } catch (error) {
     console.error(error);
     return { error: getErrorMessage(error, "Failed to load your labs.") };
+  }
+};
+
+export const getPublishedLabs = async (): Promise<ActionResult<Lab[]>> => {
+  try {
+    const token = await getAuthToken();
+
+    // Get all labs - in a real app, you'd filter for published labs
+    const response = await api.get<Lab[]>("/labs", {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load labs.") };
   }
 };
 

@@ -4,9 +4,19 @@ import {
   getModules,
   getMyLabs,
 } from "@/lib/actions";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import { DashboardClient } from "./dashboard-client";
 
 export default async function DashboardPage() {
+  const session = await auth();
+  const userRole = session.sessionClaims?.role as string | undefined;
+
+  // Redirect students to their dashboard
+  if (userRole === "STUDENT") {
+    redirect("/student/dashboard");
+  }
+
   const [labsResult, statsResult, modulesResult, equipmentResult] =
     await Promise.all([
       getMyLabs(),

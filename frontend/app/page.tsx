@@ -1,6 +1,6 @@
 "use client";
 
-import { SignInButton, SignUpButton, SignedIn, SignedOut } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
@@ -8,6 +8,23 @@ import { useEffect, useRef } from "react";
 export default function Home() {
   const router = useRouter();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const { user, isLoaded } = useUser();
+
+  // Redirect authenticated users to their dashboard
+  useEffect(() => {
+    if (isLoaded && user) {
+      const onboardingComplete = user.publicMetadata?.onboardingComplete;
+      const role = user.publicMetadata?.role as string | undefined;
+
+      if (!onboardingComplete) {
+        router.push("/onboarding");
+      } else if (role === "STUDENT") {
+        router.push("/student/dashboard");
+      } else {
+        router.push("/dashboard");
+      }
+    }
+  }, [isLoaded, user, router]);
 
   // Animated particle background
   useEffect(() => {

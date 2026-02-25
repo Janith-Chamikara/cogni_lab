@@ -10,6 +10,8 @@ import {
   FlaskConical,
   Play,
   AlertCircle,
+  Wrench,
+  XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,13 +39,39 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
     new Set()
   );
   const [started, setStarted] = React.useState(false);
+  const [setupComplete, setSetupComplete] = React.useState(false);
+  const [setupEquipment, setSetupEquipment] = React.useState<Set<string>>(
+    new Set()
+  );
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
-  const progressPercentage = (completedSteps.size / steps.length) * 100;
+  const totalSteps = steps.length;
+  const progressPercentage = totalSteps > 0 ? (completedSteps.size / totalSteps) * 100 : 0;
+  
+  const requiredEquipment = lab.labEquipments || [];
+  const setupPercentage = requiredEquipment.length > 0 
+    ? (setupEquipment.size / requiredEquipment.length) * 100 
+    : 100;
 
   const handleStartExperiment = () => {
     setStarted(true);
+  };
+
+  const handleCompleteSetup = () => {
+    setSetupComplete(true);
+  };
+
+  const handleToggleEquipmentSetup = (equipmentId: string) => {
+    setSetupEquipment((prev) => {
+      const next = new Set(prev);
+      if (next.has(equipmentId)) {
+        next.delete(equipmentId);
+      } else {
+        next.add(equipmentId);
+      }
+      return next;
+    });
   };
 
   const handleCompleteStep = () => {
@@ -95,13 +123,74 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                 <div className="flex items-center gap-2">
                   <FlaskConical className="h-5 w-5 text-muted-foreground" />
                   <span className="text-sm">
-                    {lab.labEquipments?.length || 0} Equipment Items
+                    {requiredEquipment.length || 0} Equipment Items
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-muted-foreground" />
                   <span className="text-sm">{steps.length} Steps</span>
                 </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Equipment Setup Section */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold flex items-center gap-2">
+                  <Wrench className="h-5 w-5" />
+                  Equipment Setup
+                </h3>
+                <div className="flex items-center gap-2">
+                  <Progress value={setupPercentage} className="w-24 h-2" />
+                  <span className="text-sm text-muted-foreground">
+                    {setupEquipment.size}/{requiredEquipment.length}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                {requiredEquipment.length === 0 ? (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      No equipment required for this lab
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  requiredEquipment.map((equipment) => {
+                    const isSetup = setupEquipment.has(equipment.equipmentId);
+                    return (
+                      <button
+                        key={equipment.equipmentId}
+                        onClick={() => handleToggleEquipmentSetup(equipment.equipmentId)}
+                        className="w-full flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-muted/50"
+                      >
+                        <div>
+                          {isSetup ? (
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex-1 text-left">
+                          <p className="font-medium text-sm">
+                            {equipment.equipment?.equipmentName || "Unknown Equipment"}
+                          </p>
+                          {equipment.positionX !== null && equipment.positionY !== null && (
+                            <p className="text-xs text-muted-foreground">
+                              Position: ({equipment.positionX}, {equipment.positionY})
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant={isSetup ? "default" : "outline"}>
+                          {isSetup ? "Ready" : "Not Set"}
+                        </Badge>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -124,10 +213,25 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </div>
             </div>
 
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Please ensure all equipment is set before starting the experiment. 
+                Click on equipment items above to mark them as ready.
+              </AlertDescription>
+            </Alert>
+
             <div className="flex gap-3">
-              <Button onClick={handleStartExperiment} className="flex-1">
+              <Button 
+                onClick={handleStartExperiment} 
+                className="flex-1"
+                disabled={setupPercentage < 100}
+              >
                 <Play className="h-4 w-4 mr-2" />
-                Start Experiment
+                {setupPercentage < 100 
+                  ? `Setup Equipment (${Math.round(setupPercentage)}%)`
+                  : "Start Experiment"
+                }
               </Button>
               <Button variant="outline" onClick={handleExitLab}>
                 <ChevronLeft className="h-4 w-4 mr-2" />
@@ -164,6 +268,15 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {/* Setup Status Indicator */}
+              <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
+                <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                  Setup Complete
+                </span>
+              </div>
+              <Separator orientation="vertical" className="h-6" />
+              {/* Experiment Progress */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Progress:</span>
                 <span className="text-sm font-medium">
@@ -173,6 +286,14 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               <Progress value={progressPercentage} className="w-32" />
             </div>
           </div>
+          
+          {/* Equipment Setup Summary */}
+          <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <Wrench className="h-4 w-4" />
+            <span>Equipment Ready: {setupEquipment.size}/{requiredEquipment.length}</span>
+            <Separator orientation="vertical" className="h-4" />
+            <span>Steps Completed: {completedSteps.size}/{totalSteps}</span>
+          </div>
         </div>
       </div>
 
@@ -181,7 +302,15 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
         <div className="w-80 border-r bg-muted/10 overflow-y-auto">
           <div className="p-4 space-y-2">
             <h2 className="font-semibold mb-4">Experiment Steps</h2>
-            {steps.map((step: ExperimentStep, index: number) => {
+            {steps.length === 0 ? (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription className="text-xs">
+                  No steps defined for this experiment.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              steps.map((step: ExperimentStep, index: number) => {
               const isCompleted = completedSteps.has(index);
               const isCurrent = index === currentStepIndex;
 
@@ -219,7 +348,8 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                   </div>
                 </button>
               );
-            })}
+            })
+            )}
           </div>
         </div>
 
@@ -237,81 +367,90 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
           {/* Bottom Panel - Current Step Instructions */}
           <div className="border-t bg-background">
             <div className="container mx-auto px-6 py-4">
-              <div className="space-y-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Badge>Step {currentStepIndex + 1}</Badge>
-                      {completedSteps.has(currentStepIndex) && (
-                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20">
-                          <CheckCircle2 className="h-3 w-3 mr-1" />
-                          Completed
-                        </Badge>
-                      )}
-                    </div>
-                    <h3 className="font-semibold mb-2">Instructions</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {currentStep?.stepDescription}
-                    </p>
-                  </div>
-                </div>
-
-                {currentStep?.minTolerance !== null &&
-                  currentStep?.maxTolerance !== null && (
-                  <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      <span className="font-medium">Success Criteria:</span>
-                      <p className="mt-2 text-sm">
-                        • Tolerance Range: {currentStep.minTolerance} to{" "}
-                        {currentStep.maxTolerance} {currentStep.unit || ""}
+              {currentStep ? (
+                <div className="space-y-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge>Step {currentStepIndex + 1}</Badge>
+                        {completedSteps.has(currentStepIndex) && (
+                          <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20">
+                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            Completed
+                          </Badge>
+                        )}
+                      </div>
+                      <h3 className="font-semibold mb-2">Instructions</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {currentStep.stepDescription}
                       </p>
-                    </AlertDescription>
-                  </Alert>
-                )}
+                    </div>
+                  </div>
 
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={handlePreviousStep}
-                    disabled={currentStepIndex === 0}
-                  >
-                    <ChevronLeft className="h-4 w-4 mr-2" />
-                    Previous
-                  </Button>
+                  {currentStep.minTolerance !== null &&
+                    currentStep.maxTolerance !== null && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        <span className="font-medium">Success Criteria:</span>
+                        <p className="mt-2 text-sm">
+                          • Tolerance Range: {currentStep.minTolerance} to{" "}
+                          {currentStep.maxTolerance} {currentStep.unit || ""}
+                        </p>
+                      </AlertDescription>
+                    </Alert>
+                  )}
 
-                  <div className="flex gap-2">
+                  <div className="flex items-center justify-between">
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        setCompletedSteps((prev) => {
-                          const next = new Set(prev);
-                          next.delete(currentStepIndex);
-                          return next;
-                        })
-                      }
-                      disabled={!completedSteps.has(currentStepIndex)}
+                      onClick={handlePreviousStep}
+                      disabled={currentStepIndex === 0}
                     >
-                      Reset Step
+                      <ChevronLeft className="h-4 w-4 mr-2" />
+                      Previous
                     </Button>
-                    <Button onClick={handleCompleteStep}>
-                      <CheckCircle2 className="h-4 w-4 mr-2" />
-                      {completedSteps.has(currentStepIndex)
-                        ? "Step Completed"
-                        : "Mark as Complete"}
+
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          setCompletedSteps((prev) => {
+                            const next = new Set(prev);
+                            next.delete(currentStepIndex);
+                            return next;
+                          })
+                        }
+                        disabled={!completedSteps.has(currentStepIndex)}
+                      >
+                        Reset Step
+                      </Button>
+                      <Button onClick={handleCompleteStep}>
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        {completedSteps.has(currentStepIndex)
+                          ? "Step Completed"
+                          : "Mark as Complete"}
+                      </Button>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      onClick={handleNextStep}
+                      disabled={currentStepIndex === steps.length - 1}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4 ml-2" />
                     </Button>
                   </div>
-
-                  <Button
-                    variant="outline"
-                    onClick={handleNextStep}
-                    disabled={currentStepIndex === steps.length - 1}
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
                 </div>
-              </div>
+              ) : (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    No experiment steps defined for this lab.
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
           </div>
         </div>

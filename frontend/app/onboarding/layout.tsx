@@ -6,9 +6,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  console.log((await auth()).sessionClaims?.onbardingComplete);
-  if ((await auth()).sessionClaims?.onboardingComplete === true) {
-    redirect("/");
+  const session = await auth();
+  console.log("[Onboarding Layout] onboardingComplete:", session.sessionClaims?.onboardingComplete);
+  
+  if (session.sessionClaims?.onboardingComplete === true) {
+    redirect("/dashboard");
   }
 
   return <>{children}</>;

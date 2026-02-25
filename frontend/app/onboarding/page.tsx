@@ -45,6 +45,8 @@ export default function OnboardingPage() {
   const { user } = useUser();
   const router = useRouter();
 
+  console.log("OnboardingPage rendered");
+
   const form = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: {
@@ -53,23 +55,40 @@ export default function OnboardingPage() {
     },
   });
 
+  React.useEffect(() => {
+    console.log("Form state:", form.getValues());
+    console.log("Form errors:", form.formState.errors);
+    console.log("Form is valid:", form.formState.isValid);
+  }, [form.formState.errors, form.formState.isValid, form.watch()]);
+
   const onSubmit = async (values: OnboardingFormValues) => {
+    console.log("Form submitted with values:", values);
     setIsSubmitting(true);
     setError("");
 
-    const res = await completeOnboarding(values);
+    try {
+      const res = await completeOnboarding(values);
+      console.log("Onboarding response:", res);
 
-    if (res?.message) {
-      await user?.reload();
-      console.log(user);
-      router.push("/");
+      if (res?.message) {
+        console.log("Onboarding successful, setting cookie...");
+        // Set a cookie to bypass onboarding check
+        document.cookie = "onboarding_complete=true; path=/; max-age=60";
+        console.log("Redirecting to dashboard...");
+        // Use hard navigation to ensure server-side session is refreshed
+        window.location.href = "/dashboard";
+      }
+
+      if (res?.error) {
+        console.error("Onboarding error:", res.error);
+        setError(res.error);
+      }
+    } catch (error) {
+      console.error("Unexpected error during onboarding:", error);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    if (res?.error) {
-      setError(res.error);
-    }
-
-    setIsSubmitting(false);
   };
 
   return (
@@ -90,7 +109,16 @@ export default function OnboardingPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form 
+              onSubmit={form.handleSubmit(
+                onSubmit,
+                (errors) => {
+                  console.log("Form validation failed with errors:", errors);
+                  console.log("Current form values:", form.getValues());
+                }
+              )} 
+              className="space-y-6"
+            >
               <FormField
                 control={form.control}
                 name="role"
@@ -98,8 +126,12 @@ export default function OnboardingPage() {
                   <FormItem>
                     <FormLabel>Your Role</FormLabel>
                     <Select
-                      onValueChange={field.onChange}
+                      onValueChange={(value) => {
+                        console.log("Role changed to:", value);
+                        field.onChange(value);
+                      }}
                       defaultValue={field.value}
+                      value={field.value}
                     >
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -139,6 +171,10 @@ export default function OnboardingPage() {
                       <Input
                         placeholder="e.g., University of Colombo"
                         {...field}
+                        onChange={(e) => {
+                          console.log("Institution changed to:", e.target.value);
+                          field.onChange(e);
+                        }}
                       />
                     </FormControl>
                     <FormDescription>
@@ -155,7 +191,12 @@ export default function OnboardingPage() {
                 </div>
               )}
 
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
+              <Button 
+                type="submit" 
+                className="w-full" 
+                disabled={isSubmitting}
+                onClick={() => console.log("Button clicked! Form valid:", form.formState.isValid)}
+              >
                 {isSubmitting ? "Setting up..." : "Complete Setup"}
               </Button>
             </form>

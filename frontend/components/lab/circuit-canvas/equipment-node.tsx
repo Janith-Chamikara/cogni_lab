@@ -6,6 +6,7 @@ import Image from "next/image";
 import { ImageIcon, Settings, Trash2 } from "lucide-react";
 import { LabEquipment } from "@/lib/types";
 import { Button } from "@/components/ui/button";
+import EquipmentsHandleCountForm from "./equipment-handle-count-form";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
@@ -49,6 +50,12 @@ export function EquipmentNode({ data }: { data: EquipmentNodeData }) {
       <Handle
         type="source"
         position={Position.Right}
+        id="right"
+        className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-background"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
         id="right"
         className="!h-3 !w-3 !rounded-full !border-2 !border-green-500 !bg-background"
       />

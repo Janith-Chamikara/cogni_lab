@@ -1,6 +1,6 @@
 import { getLab } from "@/lib/actions";
 import { redirect } from "next/navigation";
-import { StudentLabClient } from "./student-lab-client";
+import { StudentLabEditor } from "./student-lab-editor";
 
 export default async function StudentLabPage({
   params,
@@ -14,5 +14,5 @@ export default async function StudentLabPage({
     redirect("/student/dashboard");
   }
 
-  return <StudentLabClient lab={labResult.data} />;
+  return <StudentLabEditor lab={labResult.data} />;
 }

@@ -3,15 +3,17 @@ import {
   getLabStats,
   getModules,
   getMyLabs,
+  getMyModules,
 } from "@/lib/actions";
 import { DashboardClient } from "./dashboard-client";
 
 export default async function DashboardPage() {
-  const [labsResult, statsResult, modulesResult, equipmentResult] =
+  const [labsResult, statsResult, myModulesResult, allModulesResult, equipmentResult] =
     await Promise.all([
       getMyLabs(),
       getLabStats(),
-      getModules(), // Fetch all modules so users can create labs in any module
+      getMyModules(), // Get user's own modules
+      getModules(), // Fetch all modules for lab creation
       getLabEquipments(),
     ]);
 
@@ -21,12 +23,13 @@ export default async function DashboardPage() {
       initialStats={
         statsResult.data ?? { totalLabs: 0, activeLabs: 0, totalProgress: 0 }
       }
-      modules={modulesResult.data ?? []}
+      myModules={myModulesResult.data ?? []}
+      allModules={allModulesResult.data ?? []}
       initialEquipments={equipmentResult.data ?? []}
       error={
         labsResult.error ||
         statsResult.error ||
-        modulesResult.error ||
+        myModulesResult.error ||
         equipmentResult.error
       }
     />

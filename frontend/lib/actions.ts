@@ -195,6 +195,47 @@ export const createModule = async (
   }
 };
 
+export const updateModule = async (
+  id: string,
+  payload: UpdateModulePayload,
+): Promise<ActionResult<Module>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to update a module." };
+    }
+
+    const response = await api.put<Module>(`/modules/${id}`, payload, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to update module.") };
+  }
+};
+
+export const deleteModule = async (id: string): Promise<ActionResult<void>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to delete a module." };
+    }
+
+    await api.delete(`/modules/${id}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return {};
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to delete module.") };
+  }
+};
+
 // ============ LAB ACTIONS ============
 
 export const getLabs = async (): Promise<ActionResult<Lab[]>> => {

@@ -19,8 +19,11 @@ import {
   Clock,
   CheckCircle2,
   Wrench,
+  Edit2,
+  Trash2,
 } from "lucide-react";
 import { Lab, LabEquipment, LabStats, Module } from "@/lib/types";
+import { createModule, updateModule, deleteModule } from "@/lib/actions";
 import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
 import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { Button } from "@/components/ui/button";
@@ -48,12 +51,23 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { CreateLabDialog } from "@/components/lab/create-lab-dialog";
 
 type DashboardClientProps = {
   initialLabs: Lab[];
   initialStats: LabStats;
-  modules: Module[];
+  myModules: Module[];
+  allModules: Module[];
   initialEquipments: LabEquipment[];
   error?: string;
 };
@@ -84,17 +98,29 @@ const STATUS_CONFIG: Record<
 export function DashboardClient({
   initialLabs,
   initialStats,
-  modules,
+  myModules: initialMyModules,
+  allModules,
   initialEquipments,
   error,
 }: DashboardClientProps) {
   const [labs, setLabs] = useState(initialLabs);
   const [stats, setStats] = useState(initialStats);
+  const [myModules, setMyModules] = useState(initialMyModules);
   const [equipments, setEquipments] = useState(initialEquipments);
   const [searchQuery, setSearchQuery] = useState("");
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState("");
+  const [moduleSearchQuery, setModuleSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false);
+  const [isCreateModuleOpen, setIsCreateModuleOpen] = useState(false);
+  const [isEditModuleOpen, setIsEditModuleOpen] = useState(false);
+  const [editingModule, setEditingModule] = useState<Module | null>(null);
+  const [isLoadingModule, setIsLoadingModule] = useState(false);
+  const [moduleFormData, setModuleFormData] = useState({
+    moduleName: "",
+    moduleCode: "",
+    description: "",
+  });
 
   const filteredLabs = labs.filter(
     (lab) =>
@@ -125,6 +151,69 @@ export function DashboardClient({
         ?.toLowerCase()
         .includes(equipmentSearchQuery.toLowerCase()),
   );
+
+  const filteredModules = myModules.filter(
+    (mod) =>
+      mod.moduleName.toLowerCase().includes(moduleSearchQuery.toLowerCase()) ||
+      mod.moduleCode
+        ?.toLowerCase()
+        .includes(moduleSearchQuery.toLowerCase()) ||
+      mod.description
+        ?.toLowerCase()
+        .includes(moduleSearchQuery.toLowerCase()),
+  );
+
+  const handleModuleCreated = (newModule: Module) => {
+    setMyModules([newModule, ...myModules]);
+    setIsCreateModuleOpen(false);
+    setModuleFormData({ moduleName: "", moduleCode: "", description: "" });
+  };
+
+  const handleEditModule = (module: Module) => {
+    setEditingModule(module);
+    setModuleFormData({
+      moduleName: module.moduleName,
+      moduleCode: module.moduleCode || "",
+      description: module.description || "",
+    });
+    setIsEditModuleOpen(true);
+  };
+
+  const handleUpdateModule = async () => {
+    if (!editingModule || !moduleFormData.moduleName.trim()) return;
+    setIsLoadingModule(true);
+    try {
+      const result = await updateModule(editingModule.id, moduleFormData);
+      if (result.data) {
+        setMyModules(
+          myModules.map((m) => (m.id === editingModule.id ? result.data! : m)),
+        );
+        setIsEditModuleOpen(false);
+        setEditingModule(null);
+        setModuleFormData({ moduleName: "", moduleCode: "", description: "" });
+      }
+    } catch (error) {
+      console.error("Failed to update module:", error);
+    } finally {
+      setIsLoadingModule(false);
+    }
+  };
+
+  const handleDeleteModule = async (moduleId: string) => {
+    if (
+      !confirm(
+        "Are you sure you want to delete this module? This action cannot be undone.",
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteModule(moduleId);
+      setMyModules(myModules.filter((m) => m.id !== moduleId));
+    } catch (error) {
+      console.error("Failed to delete module:", error);
+    }
+  };
 
   if (error) {
     return (
@@ -239,10 +328,10 @@ export function DashboardClient({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-4xl font-bold">{modules.length}</div>
+              <div className="text-4xl font-bold">{myModules.length}</div>
               <p className="mt-1 flex items-center gap-1 text-sm text-blue-200">
                 <Beaker className="h-3 w-3" />
-                Course modules
+                Your modules
               </p>
             </CardContent>
             <div className="absolute -bottom-4 -right-4 h-24 w-24 rounded-full bg-white/10" />
@@ -572,49 +661,144 @@ export function DashboardClient({
 
           <TabsContent value="modules">
             <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Course Modules</CardTitle>
-                <CardDescription>
-                  Organize your labs by course modules
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {modules.map((mod) => (
-                    <Card
-                      key={mod.id}
-                      className="transition-all hover:shadow-md"
+              <CardHeader className="border-b bg-muted/50">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <CardTitle className="text-xl">Your Modules</CardTitle>
+                    <CardDescription>
+                      Create and manage your course modules
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        placeholder="Search modules..."
+                        value={moduleSearchQuery}
+                        onChange={(e) => setModuleSearchQuery(e.target.value)}
+                        className="w-64 bg-background pl-10"
+                      />
+                    </div>
+                    <Button
+                      onClick={() => {
+                        setModuleFormData({
+                          moduleName: "",
+                          moduleCode: "",
+                          description: "",
+                        });
+                        setIsCreateModuleOpen(true);
+                      }}
+                      className="gap-2"
                     >
-                      <CardHeader>
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                            <Beaker className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <CardTitle className="text-base">
-                              {mod.moduleName}
-                            </CardTitle>
-                            {mod.moduleCode && (
-                              <Badge variant="secondary" className="mt-1">
-                                {mod.moduleCode}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="pt-0">
-                        <p className="line-clamp-2 text-sm text-muted-foreground">
-                          {mod.description || "No description"}
-                        </p>
-                        <div className="mt-3 flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">
-                            {mod._count?.labInstances || 0} labs
-                          </span>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
+                      <Plus className="h-4 w-4" />
+                      Create Module
+                    </Button>
+                  </div>
                 </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                {filteredModules.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <div className="rounded-full bg-muted p-4">
+                      <Beaker className="h-8 w-8 text-muted-foreground" />
+                    </div>
+                    <p className="mt-4 font-medium text-foreground">
+                      {moduleSearchQuery
+                        ? "No modules found"
+                        : "No modules yet"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {moduleSearchQuery
+                        ? "Try a different search term"
+                        : "Create your first course module to get started"}
+                    </p>
+                    {!moduleSearchQuery && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          setModuleFormData({
+                            moduleName: "",
+                            moduleCode: "",
+                            description: "",
+                          });
+                          setIsCreateModuleOpen(true);
+                        }}
+                        className="mt-4 gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        Create Module
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {filteredModules.map((mod) => (
+                      <Card
+                        key={mod.id}
+                        className="group relative transition-all hover:shadow-md"
+                      >
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                                <Beaker className="h-5 w-5 text-primary" />
+                              </div>
+                              <div className="flex-1">
+                                <Link href={`/modules/${mod.id}`}>
+                                  <CardTitle className="cursor-pointer text-base hover:text-primary">
+                                    {mod.moduleName}
+                                  </CardTitle>
+                                </Link>
+                                {mod.moduleCode && (
+                                  <Badge variant="secondary" className="mt-1">
+                                    {mod.moduleCode}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 opacity-0 transition-opacity group-hover:opacity-100"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => handleEditModule(mod)}
+                                  className="gap-2"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDeleteModule(mod.id)}
+                                  className="gap-2 text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <p className="line-clamp-2 text-sm text-muted-foreground">
+                            {mod.description || "No description"}
+                          </p>
+                          <div className="mt-3 flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">
+                              {mod._count?.labInstances || 0} labs
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -644,7 +828,7 @@ export function DashboardClient({
       <CreateLabDialog
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
-        modules={modules}
+        modules={allModules}
         onCreated={handleLabCreated}
       />
 
@@ -654,6 +838,161 @@ export function DashboardClient({
         onOpenChange={setIsCreateEquipmentOpen}
         onCreated={handleEquipmentCreated}
       />
+
+      {/* Create Module Dialog */}
+      <Dialog open={isCreateModuleOpen} onOpenChange={setIsCreateModuleOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Create New Module</DialogTitle>
+            <DialogDescription>
+              Create a new course module for your virtual laboratories
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="module-name">Module Name *</Label>
+              <Input
+                id="module-name"
+                placeholder="e.g. Introduction to Chemistry"
+                value={moduleFormData.moduleName}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    moduleName: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="module-code">Module Code</Label>
+              <Input
+                id="module-code"
+                placeholder="e.g. CHEM101"
+                value={moduleFormData.moduleCode}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    moduleCode: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="module-description">Description</Label>
+              <Textarea
+                id="module-description"
+                placeholder="Describe what this module covers..."
+                value={moduleFormData.description}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    description: e.target.value,
+                  })
+                }
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsCreateModuleOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!moduleFormData.moduleName.trim()) return;
+                setIsLoadingModule(true);
+                try {
+                  const result = await createModule(moduleFormData);
+                  if (result.data) {
+                    handleModuleCreated(result.data);
+                  }
+                } catch (error) {
+                  console.error("Failed to create module:", error);
+                } finally {
+                  setIsLoadingModule(false);
+                }
+              }}
+              disabled={!moduleFormData.moduleName.trim() || isLoadingModule}
+            >
+              {isLoadingModule ? "Creating..." : "Create Module"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Module Dialog */}
+      <Dialog open={isEditModuleOpen} onOpenChange={setIsEditModuleOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Module</DialogTitle>
+            <DialogDescription>
+              Update the module details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-module-name">Module Name *</Label>
+              <Input
+                id="edit-module-name"
+                placeholder="e.g. Introduction to Chemistry"
+                value={moduleFormData.moduleName}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    moduleName: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-module-code">Module Code</Label>
+              <Input
+                id="edit-module-code"
+                placeholder="e.g. CHEM101"
+                value={moduleFormData.moduleCode}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    moduleCode: e.target.value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-module-description">Description</Label>
+              <Textarea
+                id="edit-module-description"
+                placeholder="Describe what this module covers..."
+                value={moduleFormData.description}
+                onChange={(e) =>
+                  setModuleFormData({
+                    ...moduleFormData,
+                    description: e.target.value,
+                  })
+                }
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsEditModuleOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpdateModule}
+              disabled={!moduleFormData.moduleName.trim() || isLoadingModule}
+            >
+              {isLoadingModule ? "Updating..." : "Update Module"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

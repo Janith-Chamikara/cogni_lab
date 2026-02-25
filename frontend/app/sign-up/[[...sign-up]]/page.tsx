@@ -17,7 +17,7 @@ export default function SignUpPage() {
           <div className="order-last flex items-center justify-center bg-card p-8 md:order-first md:p-12">
             <div className="w-full max-w-sm">
               <SignUp
-                fallbackRedirectUrl={"/"}
+                fallbackRedirectUrl={"/onboarding"}
                 routing="path"
                 path="/sign-up"
               />

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Navbar } from "@/components/navbar";
 import "./globals.css";
+import { AiChatWidget } from "@/components/ai-chat-widget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        suppressHydrationWarning
       >
         <ClerkProvider>
           <ThemeProvider
@@ -39,6 +41,7 @@ export default function RootLayout({
           >
             <Navbar />
             {children}
+            <AiChatWidget />
           </ThemeProvider>
         </ClerkProvider>
       </body>

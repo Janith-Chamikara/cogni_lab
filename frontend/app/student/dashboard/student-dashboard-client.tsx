@@ -49,7 +49,7 @@ export function StudentDashboardClient({
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-8">
+    <div className="max-w-7xl mx-auto space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-3xl font-bold">Student Dashboard</h1>
@@ -60,7 +60,7 @@ export function StudentDashboardClient({
 
       {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card style={{ backgroundColor: '#2872db' }} className="border-none">
+        <Card style={{ backgroundColor: "#2872db" }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-white">
               Available Labs
@@ -68,56 +68,62 @@ export function StudentDashboardClient({
             <FlaskConical className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{stats.available}</div>
-            <p className="text-xs text-white/80">
-              Ready to start
-            </p>
+            <div className="text-2xl font-bold text-white">
+              {stats.available}
+            </div>
+            <p className="text-xs text-white/80">Ready to start</p>
           </CardContent>
         </Card>
 
-        <Card style={{ backgroundColor: '#a52b2b' }} className="border-none">
+        <Card style={{ backgroundColor: "#a52b2b" }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">In Progress</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">
+              In Progress
+            </CardTitle>
             <Clock className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{stats.inProgress}</div>
-            <p className="text-xs text-white/80">
-              Currently working on
-            </p>
+            <div className="text-2xl font-bold text-white">
+              {stats.inProgress}
+            </div>
+            <p className="text-xs text-white/80">Currently working on</p>
           </CardContent>
         </Card>
 
-        <Card style={{ backgroundColor: '#b78407' }} className="border-none">
+        <Card style={{ backgroundColor: "#b78407" }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Completed</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">
+              Completed
+            </CardTitle>
             <CheckCircle2 className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{stats.completed}</div>
-            <p className="text-xs text-white/80">
-              Successfully finished
-            </p>
+            <div className="text-2xl font-bold text-white">
+              {stats.completed}
+            </div>
+            <p className="text-xs text-white/80">Successfully finished</p>
           </CardContent>
         </Card>
 
-        <Card style={{ backgroundColor: '#309053' }} className="border-none">
+        <Card style={{ backgroundColor: "#309053" }} className="border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-white">Modules</CardTitle>
+            <CardTitle className="text-sm font-medium text-white">
+              Modules
+            </CardTitle>
             <BookOpen className="h-4 w-4 text-white/80" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-white">{initialModules.length}</div>
-            <p className="text-xs text-white/80">
-              Course modules
-            </p>
+            <div className="text-2xl font-bold text-white">
+              {initialModules.length}
+            </div>
+            <p className="text-xs text-white/80">Course modules</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Module Filter Tabs */}
       <Tabs value={selectedModule} onValueChange={setSelectedModule}>
-        <TabsList>
+        <TabsList className="max-w-7xl overflow-scroll">
           <TabsTrigger value="all">All Labs</TabsTrigger>
           {initialModules.map((module) => (
             <TabsTrigger key={module.id} value={module.id}>
@@ -132,7 +138,9 @@ export function StudentDashboardClient({
             <Card className="p-12">
               <div className="text-center">
                 <FlaskConical className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">No labs available</h3>
+                <h3 className="mt-4 text-lg font-semibold">
+                  No labs available
+                </h3>
                 <p className="text-muted-foreground mt-2">
                   Check back later for new experiments
                 </p>
@@ -145,7 +153,9 @@ export function StudentDashboardClient({
                   <CardHeader>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <CardTitle className="line-clamp-1">{lab.labName}</CardTitle>
+                        <CardTitle className="line-clamp-1">
+                          {lab.labName}
+                        </CardTitle>
                         <CardDescription className="mt-2 line-clamp-2">
                           {lab.description}
                         </CardDescription>

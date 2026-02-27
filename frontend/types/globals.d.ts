@@ -6,4 +6,8 @@ declare global {
       onboardingComplete?: boolean;
     };
   }
+
+  interface Window {
+    __COGNI_AI_CONTEXT__?: unknown;
+  }
 }

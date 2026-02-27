@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -27,6 +28,8 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Lab, ExperimentStep } from "@/lib/types";
 import { StudentEquipmentCanvas } from "@/components/student/student-equipment-canvas";
+import { buildLabContext } from "@/lib/ai-context";
+import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
 interface StudentLabClientProps {
   lab: Lab;
@@ -53,6 +56,32 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
   const setupPercentage = requiredEquipment.length > 0 
     ? (setupEquipment.size / requiredEquipment.length) * 100 
     : 100;
+
+  const labContext = useMemo(
+    () =>
+      buildLabContext(lab, {
+        steps,
+        equipments: requiredEquipment,
+        connections: lab.wireConnections,
+      }),
+    [lab, steps, requiredEquipment],
+  );
+
+  useAiPageContext({
+    pageType: "student-lab",
+    lab: labContext,
+    student: {
+      currentStepIndex,
+      completedSteps: completedSteps.size,
+      totalSteps: totalSteps,
+      started,
+      setupPercent: setupPercentage,
+    },
+    hints: [
+      "Guide the student through the current step and equipment setup.",
+      "Reference the step list and success criteria when relevant.",
+    ],
+  });
 
   const handleStartExperiment = () => {
     setStarted(true);

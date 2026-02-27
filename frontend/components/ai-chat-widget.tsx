@@ -4,11 +4,26 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
+import {
+  buildChatPayload,
+  buildDynamicHints,
+  getAiPageContext,
+  getPageSnapshot,
+  inferPageType,
+  setAiPageContext,
+} from "@/lib/ai-context";
 
 type ChatMessage = {
   role: "assistant" | "user";
   content: string;
 };
+
+const normalizeAiReply = (content: string) =>
+  content
+    .replace(/\*\*/g, "")
+    .replace(/^\s*\d+\.\s+/gm, "- ")
+    .replace(/^\s*•\s+/gm, "- ")
+    .trim();
 
 export function AiChatWidget() {
   const pathname = usePathname();
@@ -30,6 +45,15 @@ export function AiChatWidget() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (!pathname) return;
+    setAiPageContext({
+      route: pathname,
+      pageTitle: typeof document !== "undefined" ? document.title : undefined,
+      pageType: inferPageType(pathname),
+    });
+  }, [pathname]);
 
   const handleChatSend = async () => {
     const trimmed = chatInput.trim();
@@ -62,13 +86,31 @@ export function AiChatWidget() {
         return;
       }
 
+      const context = getAiPageContext();
+      const pageText = getPageSnapshot({ maxChars: 900 });
+      const dynamicHints = buildDynamicHints({
+        lastUserMessage: trimmed,
+        context,
+      });
+      const mergedHints = Array.from(
+        new Set([...(context.hints ?? []), ...dynamicHints]),
+      );
+      const payloadMessages = buildChatPayload(nextMessages, {
+        ...context,
+        route: pathname ?? context.route,
+        pageTitle:
+          typeof document !== "undefined" ? document.title : context.pageTitle,
+        pageText,
+        hints: mergedHints.length ? mergedHints : undefined,
+      });
+
       const response = await fetch(`${baseUrl}/ai/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: payloadMessages }),
       });
 
       if (!response.ok) {
@@ -80,7 +122,9 @@ export function AiChatWidget() {
       }
 
       const data = await response.json();
-      const reply = data?.reply || "Sorry, I couldn't respond.";
+      const reply = normalizeAiReply(
+        data?.reply || "Sorry, I couldn't respond.",
+      );
       setChatMessages((prev) => [
         ...prev,
         { role: "assistant", content: reply },
@@ -98,7 +142,7 @@ export function AiChatWidget() {
   if (isAuthPage) return null;
 
   return (
-    <>
+    <div id="ai-chat-widget">
       <button
         type="button"
         onClick={() => setIsAiChatOpen((open) => !open)}
@@ -191,6 +235,6 @@ export function AiChatWidget() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { ArrowLeft, Play, Save, Trash2, Settings } from "lucide-react";
 import {
@@ -24,6 +24,8 @@ import {
 import { StepsSidebar } from "@/components/lab/steps-sidebar";
 import { ThresholdsDialog } from "@/components/lab/thresholds-dialog";
 import { EquipmentConfigDialog } from "@/components/lab/equipment-config-dialog";
+import { buildLabContext } from "@/lib/ai-context";
+import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
 type LabEditorClientProps = {
   lab: Lab;
@@ -54,6 +56,25 @@ export function LabEditorClient({
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(false);
   const [configEquipment, setConfigEquipment] =
     useState<PlacedEquipment | null>(null);
+
+  const labContext = useMemo(
+    () =>
+      buildLabContext(lab, {
+        steps,
+        equipments: placedEquipments,
+        connections: wireConnections,
+      }),
+    [lab, steps, placedEquipments, wireConnections],
+  );
+
+  useAiPageContext({
+    pageType: "lab-editor",
+    lab: labContext,
+    hints: [
+      "You are editing a lab. Help with wiring, steps, equipment configs, and thresholds.",
+      "If the user asks about saving or running, mention the toolbar actions.",
+    ],
+  });
 
   const handleEquipmentDrop = useCallback(
     (equipmentId: string, x: number, y: number) => {

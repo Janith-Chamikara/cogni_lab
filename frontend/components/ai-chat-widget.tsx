@@ -146,7 +146,7 @@ export function AiChatWidget() {
       <button
         type="button"
         onClick={() => setIsAiChatOpen((open) => !open)}
-        className="fixed bottom-6 right-6 z-50 flex h-20 w-20 items-center justify-center rounded-full border border-white/40 bg-white/90 shadow-lg transition active:scale-95 hover:shadow-xl"
+        className="fixed bottom-6 right-6 z-50 flex h-20 w-20 items-center justify-center rounded-full border shadow-lg transition active:scale-95 hover:shadow-xl"
         aria-label="Toggle AI chat"
       >
         <Image
@@ -160,7 +160,7 @@ export function AiChatWidget() {
       </button>
 
       {isAiChatOpen && (
-        <div className="fixed bottom-[120px] right-6 z-50 h-[388px] w-[414px] max-h-[calc(100vh-160px)] max-w-[calc(100vw-48px)] rounded-[12px] border border-black/10 bg-white shadow-xl">
+        <div className="fixed bottom-[120px] right-6 z-50 h-[388px] w-[414px] max-h-[calc(100vh-160px)] max-w-[calc(100vw-48px)] rounded-[12px] bg-background border shadow-xl">
           <div className="flex h-full flex-col p-4">
             <div className="mb-3 flex items-center gap-3">
               <div className="relative h-9 w-9 overflow-hidden rounded-full border border-black/10">

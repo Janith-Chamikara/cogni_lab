@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Wrench,
   XCircle,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Lab, ExperimentStep } from "@/lib/types";
 import { StudentEquipmentCanvas } from "@/components/student/student-equipment-canvas";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 
 interface StudentLabClientProps {
   lab: Lab;
@@ -43,6 +45,7 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
   const [setupEquipment, setSetupEquipment] = React.useState<Set<string>>(
     new Set()
   );
+  const [showHelpDialog, setShowHelpDialog] = React.useState(false);
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
@@ -233,6 +236,14 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                   : "Start Experiment"
                 }
               </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setShowHelpDialog(true)}
+                className="gap-2"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Get Help
+              </Button>
               <Button variant="outline" onClick={handleExitLab}>
                 <ChevronLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard
@@ -240,6 +251,13 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Help Dialog */}
+        <InstructorLabHelpDialog
+          lab={lab}
+          isOpen={showHelpDialog}
+          onOpenChange={setShowHelpDialog}
+        />
       </div>
     );
   }
@@ -284,6 +302,17 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                 </span>
               </div>
               <Progress value={progressPercentage} className="w-32" />
+              <Separator orientation="vertical" className="h-6" />
+              {/* Get Help Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHelpDialog(true)}
+                className="gap-2"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Get Help
+              </Button>
             </div>
           </div>
           
@@ -455,6 +484,13 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
           </div>
         </div>
       </div>
+
+      {/* Help Dialog */}
+      <InstructorLabHelpDialog
+        lab={lab}
+        isOpen={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
+      />
     </div>
   );
 }

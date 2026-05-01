@@ -14,6 +14,7 @@ import {
   TestTube2,
   XCircle,
   Info,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Lab, ExperimentStep, LabEquipment } from "@/lib/types";
 import { StudentCircuitCanvas } from "@/components/student/student-circuit-canvas";
 import { StudentEquipmentSidebar } from "@/components/student/student-equipment-sidebar";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 
 interface StudentLabEditorProps {
   lab: Lab;
@@ -45,6 +47,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
   const [placedEquipments, setPlacedEquipments] = React.useState<any[]>([]);
   const [wireConnections, setWireConnections] = React.useState<any[]>([]);
   const [isWireMode, setIsWireMode] = React.useState(false);
+  const [showHelpDialog, setShowHelpDialog] = React.useState(false);
   const [validationResults, setValidationResults] = React.useState<{
     isValid: boolean;
     score: number;
@@ -343,6 +346,14 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                 <TestTube2 className="h-4 w-4 mr-2" />
                 Check Progress
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHelpDialog(true)}
+              >
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Get Help
+              </Button>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Progress:</span>
@@ -546,6 +557,13 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
         {/* Right Sidebar - Equipment */}
         <StudentEquipmentSidebar equipments={allEquipments} />
       </div>
+
+      {/* Help Dialog */}
+      <InstructorLabHelpDialog
+        lab={lab}
+        isOpen={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
+      />
     </div>
   );
 }

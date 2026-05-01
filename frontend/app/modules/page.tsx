@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CreateModuleDialog } from "@/components/modules/create-module-dialog";
+import { EditModuleDialog } from "@/components/modules/edit-module-dialog";
 import { ModuleCard } from "@/components/modules/module-card";
 import { Module } from "@/lib/types";
 
@@ -15,6 +16,8 @@ export default function ModulesPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingModule, setEditingModule] = useState<Module | null>(null);
 
   useEffect(() => {
     let isActive = true;
@@ -47,6 +50,17 @@ export default function ModulesPage() {
 
   const handleModuleCreated = (module: Module) => {
     setModules((prev) => [module, ...prev]);
+  };
+
+  const handleModuleEdit = (module: Module) => {
+    setEditingModule(module);
+    setIsEditOpen(true);
+  };
+
+  const handleModuleUpdated = (updatedModule: Module) => {
+    setModules((prev) =>
+      prev.map((m) => (m.id === updatedModule.id ? updatedModule : m))
+    );
   };
 
   const filteredModules = useMemo(() => {
@@ -115,7 +129,11 @@ export default function ModulesPage() {
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredModules.map((module) => (
-              <ModuleCard key={module.id} module={module} />
+              <ModuleCard 
+                key={module.id} 
+                module={module} 
+                onEdit={handleModuleEdit}
+              />
             ))}
           </div>
         </div>
@@ -125,6 +143,13 @@ export default function ModulesPage() {
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
         onCreated={handleModuleCreated}
+      />
+
+      <EditModuleDialog
+        open={isEditOpen}
+        onOpenChange={setIsEditOpen}
+        module={editingModule}
+        onUpdated={handleModuleUpdated}
       />
     </div>
   );

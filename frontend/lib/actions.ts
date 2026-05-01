@@ -211,6 +211,28 @@ export const createModule = async (
   }
 };
 
+export const updateModule = async (
+  id: string,
+  payload: Partial<CreateModulePayload>,
+): Promise<ActionResult<Module>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to update a module." };
+    }
+
+    const response = await api.patch<Module>(`/modules/${id}`, payload, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to update module.") };
+  }
+};
+
 // ============ LAB ACTIONS ============
 
 export const getLabs = async (): Promise<ActionResult<Lab[]>> => {

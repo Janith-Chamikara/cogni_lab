@@ -1,13 +1,24 @@
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Edit, Pencil } from "lucide-react";
 import { Module } from "@/lib/types";
 
 interface ModuleCardProps {
   module: Module;
+  onEdit?: (module: Module) => void;
 }
 
-export function ModuleCard({ module }: ModuleCardProps) {
+export function ModuleCard({ module, onEdit }: ModuleCardProps) {
+  const handleEditClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onEdit) {
+      onEdit(module);
+    }
+  };
+
   return (
     <Link href={`/modules/${module.id}`}>
       <Card className="h-full cursor-pointer transition-all hover:shadow-lg hover:border-primary">
@@ -19,6 +30,17 @@ export function ModuleCard({ module }: ModuleCardProps) {
                 <CardDescription className="mt-1">{module.moduleCode}</CardDescription>
               )}
             </div>
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={handleEditClick}
+                title="Edit module"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="space-y-3">

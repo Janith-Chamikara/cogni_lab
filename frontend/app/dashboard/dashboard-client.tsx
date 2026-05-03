@@ -126,6 +126,19 @@ export function DashboardClient({
         .includes(equipmentSearchQuery.toLowerCase()),
   );
 
+  const completedLabs = labs.filter((lab) => lab.completionStatus === "COMPLETED").length;
+  const inProgressLabs = labs.filter((lab) => lab.completionStatus === "IN_PROGRESS").length;
+  const notStartedLabs = labs.filter((lab) => lab.completionStatus === "NOT_STARTED").length;
+
+  const topModules = modules
+    .map((mod) => ({
+      id: mod.id,
+      name: mod.moduleName,
+      count: mod._count?.labInstances ?? 0,
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+
   if (error) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -627,12 +640,118 @@ export function DashboardClient({
                   Track student performance and lab usage
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex min-h-[300px] items-center justify-center">
-                <div className="text-center">
-                  <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground/30" />
-                  <p className="mt-4 text-muted-foreground">
-                    Analytics dashboard coming soon
-                  </p>
+              <CardContent>
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Labs
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold">{stats.totalLabs}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Active Labs
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold">{stats.activeLabs}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Completed Labs
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold">{completedLabs}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Total Progress Entries
+                    </p>
+                    <p className="mt-3 text-3xl font-semibold">{stats.totalProgress}</p>
+                  </div>
+                </div>
+
+                <div className="mt-8 grid gap-4 lg:grid-cols-2">
+                  <Card className="border border-border bg-card">
+                    <CardHeader>
+                      <CardTitle>Lab Status Overview</CardTitle>
+                      <CardDescription>
+                        Current lab progress across all active modules.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
+                          <div>
+                            <p className="text-sm font-medium">In Progress</p>
+                            <p className="text-xs text-muted-foreground">
+                              Labs currently being worked on
+                            </p>
+                          </div>
+                          <span className="text-xl font-semibold text-amber-600">
+                            {inProgressLabs}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
+                          <div>
+                            <p className="text-sm font-medium">Not Started</p>
+                            <p className="text-xs text-muted-foreground">
+                              Labs waiting for student activity
+                            </p>
+                          </div>
+                          <span className="text-xl font-semibold text-slate-700">
+                            {notStartedLabs}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
+                          <div>
+                            <p className="text-sm font-medium">Completed</p>
+                            <p className="text-xs text-muted-foreground">
+                              Labs finished by students
+                            </p>
+                          </div>
+                          <span className="text-xl font-semibold text-emerald-600">
+                            {completedLabs}
+                          </span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border border-border bg-card">
+                    <CardHeader>
+                      <CardTitle>Top Modules</CardTitle>
+                      <CardDescription>
+                        Most active modules by number of labs.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {topModules.length > 0 ? (
+                          topModules.map((module) => (
+                            <div
+                              key={module.id}
+                              className="flex items-center justify-between rounded-xl bg-muted/10 p-4"
+                            >
+                              <div>
+                                <p className="font-medium">{module.name}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {module.count} lab{module.count === 1 ? "" : "s"}
+                                </p>
+                              </div>
+                              <Badge variant="secondary">{module.count}</Badge>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            No module data available.
+                          </p>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
                 </div>
               </CardContent>
             </Card>

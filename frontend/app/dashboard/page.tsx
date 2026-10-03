@@ -4,13 +4,17 @@ import {
   getModules,
   getMyLabs,
 } from "@/lib/actions";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { DashboardClient } from "./dashboard-client";
 
 export default async function DashboardPage() {
   const session = await auth();
-  const userRole = session.sessionClaims?.role as string | undefined;
+  // The role lives in publicMetadata (set at onboarding). The session token
+  // can lag right after onboarding, so fall back to the Clerk user record.
+  const userRole =
+    session.sessionClaims?.metadata?.role ??
+    ((await currentUser())?.publicMetadata?.role as string | undefined);
 
   // Redirect students to their dashboard
   if (userRole === "STUDENT") {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Search, ImageIcon } from "lucide-react";
-import type { LabEquipment } from "@/lib/types";
+import type { EquipmentPlacement } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
@@ -15,15 +15,54 @@ const getCloudinaryUrl = (publicId?: string | null) => {
   return `https://res.cloudinary.com/${cloudinaryCloudName}/image/upload/${publicId}`;
 };
 
-type StudentEquipmentSidebarProps = {
-  equipments: (LabEquipment | null | undefined)[];
+// Primary values shown next to a component (matches the instructor's config).
+const VALUE_FIELDS: { key: string; unit: string }[] = [
+  { key: "resistance", unit: "Ω" },
+  { key: "capacitance", unit: "µF" },
+  { key: "inductance", unit: "H" },
+  { key: "voltage", unit: "V" },
+];
+
+/** Short value text for a placement, e.g. "100 Ω". */
+export const getPlacementValueText = (placement: EquipmentPlacement) => {
+  const config = {
+    ...((placement.equipment?.defaultConfigJson as Record<string, unknown>) ??
+      {}),
+    ...(placement.configJson ?? {}),
+  };
+  for (const field of VALUE_FIELDS) {
+    const value = config[field.key];
+    if (typeof value === "number" || typeof value === "string") {
+      return `${value} ${field.unit}`;
+    }
+  }
+  return null;
 };
 
-function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
+/** Display name for a required component, e.g. "R1 · 100 Ω". */
+export const getPlacementDisplayName = (placement: EquipmentPlacement) => {
+  const label =
+    placement.componentLabel ?? placement.equipment?.equipmentName ?? "";
+  const value = getPlacementValueText(placement);
+  return value ? `${label} · ${value}` : label;
+};
+
+type StudentEquipmentSidebarProps = {
+  /** The lab's required components (instructor placements). */
+  placements: EquipmentPlacement[];
+};
+
+function DraggableSidebarItem({
+  placement,
+}: {
+  placement: EquipmentPlacement;
+}) {
+  const equipment = placement.equipment!;
   const imageUrl = getCloudinaryUrl(equipment.imageUrl);
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData("application/equipment", equipment.id);
+    // The placement id tells the editor which required component this is.
+    e.dataTransfer.setData("application/equipment", placement.id!);
     e.dataTransfer.effectAllowed = "move";
   };
 
@@ -48,25 +87,30 @@ function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
         </div>
       )}
       <p className="mt-2 w-full truncate text-center text-xs font-medium">
-        {equipment.equipmentName}
+        {placement.componentLabel ?? equipment.equipmentName}
+      </p>
+      <p className="w-full truncate text-center text-[10px] text-muted-foreground">
+        {getPlacementValueText(placement) ?? equipment.equipmentName}
       </p>
     </div>
   );
 }
 
 export function StudentEquipmentSidebar({
-  equipments,
+  placements,
 }: StudentEquipmentSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
-  const validEquipments = equipments.filter(
-    (eq): eq is LabEquipment => eq !== null && eq !== undefined,
+  const validPlacements = placements.filter(
+    (p) => p.id !== undefined && p.equipment,
   );
 
-  const filteredEquipments = validEquipments.filter(
-    (eq) =>
-      eq.equipmentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      eq.equipmentType.toLowerCase().includes(searchQuery.toLowerCase()),
+  const query = searchQuery.toLowerCase();
+  const filteredPlacements = validPlacements.filter(
+    (p) =>
+      p.equipment!.equipmentName.toLowerCase().includes(query) ||
+      p.equipment!.equipmentType.toLowerCase().includes(query) ||
+      (p.componentLabel ?? "").toLowerCase().includes(query),
   );
 
   return (
@@ -89,12 +133,12 @@ export function StudentEquipmentSidebar({
           Components
         </h3>
         <div className="grid grid-cols-2 gap-3">
-          {filteredEquipments.map((equipment) => (
-            <DraggableSidebarItem key={equipment.id} equipment={equipment} />
+          {filteredPlacements.map((placement) => (
+            <DraggableSidebarItem key={placement.id} placement={placement} />
           ))}
         </div>
 
-        {filteredEquipments.length === 0 && (
+        {filteredPlacements.length === 0 && (
           <p className="text-center text-sm text-muted-foreground">
             No equipment found
           </p>

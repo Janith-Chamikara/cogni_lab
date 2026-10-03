@@ -14,7 +14,7 @@ import {
   Node,
   NodeTypes,
   BackgroundVariant,
-  MarkerType,
+  ConnectionMode,
   useReactFlow,
   ReactFlowProvider,
 } from "@xyflow/react";
@@ -76,6 +76,7 @@ function CircuitCanvasInner({
           // Student view does not support equipment config yet,
           // so we pass a no-op handler for onConfig.
           onConfig: () => {},
+          looseTerminals: true,
         },
         draggable: !isWireMode,
       })),
@@ -96,10 +97,7 @@ function CircuitCanvasInner({
           stroke: conn.wireColor || "#374151",
           strokeWidth: 3,
         },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: conn.wireColor || "#374151",
-        },
+        // No arrowheads: a wire has no electrical direction.
         animated: true,
       })),
     [wireConnections],
@@ -120,6 +118,7 @@ function CircuitCanvasInner({
           index,
           onRemove: onEquipmentRemove,
           onConfig: () => {},
+          looseTerminals: true,
         },
         draggable: !isWireMode,
       })),
@@ -139,10 +138,6 @@ function CircuitCanvasInner({
         style: {
           stroke: conn.wireColor || "#22c55e",
           strokeWidth: 3,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: conn.wireColor || "#22c55e",
         },
         animated: true,
       })),
@@ -191,6 +186,32 @@ function CircuitCanvasInner({
     [isWireMode, wireConnections, onConnectionsChange],
   );
 
+  // Keyboard deletes (Backspace/Delete) must update the parent state too,
+  // otherwise the deleted wire or component would still be graded.
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      const deletedIds = new Set(deleted.map((edge) => edge.id));
+      onConnectionsChange(
+        wireConnections.filter(
+          (conn, index) => !deletedIds.has(conn.id || `edge-${index}`),
+        ),
+      );
+    },
+    [wireConnections, onConnectionsChange],
+  );
+
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      // Remove from the highest index down so earlier indexes stay valid.
+      deleted
+        .map((node) => placedEquipments.findIndex((eq) => eq.id === node.id))
+        .filter((index) => index >= 0)
+        .sort((a, b) => b - a)
+        .forEach((index) => onEquipmentRemove(index));
+    },
+    [placedEquipments, onEquipmentRemove],
+  );
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -224,6 +245,17 @@ function CircuitCanvasInner({
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onEdgeClick={onEdgeClick}
+        onEdgesDelete={onEdgesDelete}
+        onNodesDelete={onNodesDelete}
+        // Any terminal can connect to any other terminal (needed for
+        // parallel wiring such as R1.left to R2.left).
+        connectionMode={ConnectionMode.Loose}
+        isValidConnection={(conn) =>
+          !(
+            conn.source === conn.target &&
+            conn.sourceHandle === conn.targetHandle
+          )
+        }
         onDragOver={onDragOver}
         onDrop={onDrop}
         nodeTypes={nodeTypes}

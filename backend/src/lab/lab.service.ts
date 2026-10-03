@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client';
 import {
   CreateLabDto,
   UpdateLabDto,
@@ -7,6 +13,17 @@ import {
   UpdateLabStepsDto,
   UpdateWireConnectionsDto,
 } from './dto/lab.dto';
+import {
+  buildRequiredComponents,
+  InvalidCircuitRulesError,
+  normalizeCircuitRules,
+} from '../circuit-validation';
+
+export type LabActor = {
+  userId: string;
+  isInstructor: boolean;
+  isAdmin: boolean;
+};
 
 @Injectable()
 export class LabService {
@@ -142,7 +159,16 @@ export class LabService {
       throw new NotFoundException(`Lab with ID ${id} not found`);
     }
 
-    return lab;
+    // Expose the labels the validator uses (R1, R2, ...) so the student UI
+    // and validation messages refer to components by the same names.
+    const required = buildRequiredComponents(lab.labEquipments);
+    return {
+      ...lab,
+      labEquipments: lab.labEquipments.map((placement, index) => ({
+        ...placement,
+        componentLabel: required[index].label,
+      })),
+    };
   }
 
   async findByInstructor(instructorId: string) {
@@ -365,6 +391,54 @@ export class LabService {
         })),
       });
     }
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Set the circuit grading rules. Only the lab's instructor (or an admin)
+   * may change them; null returns the lab to legacy grading.
+   */
+  async updateRules(id: string, actor: LabActor, rules: unknown) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      select: { id: true, instructorId: true },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    if (
+      !actor.isAdmin &&
+      (!actor.isInstructor || lab.instructorId !== actor.userId)
+    ) {
+      throw new ForbiddenException(
+        'Only the instructor who owns this lab can change its rules',
+      );
+    }
+
+    let circuitRulesJson: ReturnType<typeof normalizeCircuitRules> | null =
+      null;
+    if (rules !== null && rules !== undefined) {
+      try {
+        circuitRulesJson = normalizeCircuitRules(rules);
+      } catch (error) {
+        if (error instanceof InvalidCircuitRulesError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+    }
+
+    await this.prisma.labInstance.update({
+      where: { id },
+      data: {
+        circuitRulesJson: circuitRulesJson
+          ? (circuitRulesJson as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+      },
+    });
 
     return this.findOne(id);
   }

@@ -22,11 +22,17 @@ export type EquipmentNodeData = {
   index: number;
   onRemove: (index: number) => void;
   onConfig: (index: number) => void;
+  /**
+   * Student canvas only: every handle can start or end a wire, so terminals
+   * can be joined left-to-left (parallel). Instructor editor leaves it unset.
+   */
+  looseTerminals?: boolean;
 };
 
 export function EquipmentNode({ data }: { data: EquipmentNodeData }) {
   const imageUrl = getCloudinaryUrl(data.equipment.imageUrl);
   const [showActions, setShowActions] = useState(false);
+  const inputType = data.looseTerminals ? "source" : "target";
 
   return (
     <div
@@ -36,13 +42,13 @@ export function EquipmentNode({ data }: { data: EquipmentNodeData }) {
     >
       {/* Connection handles */}
       <Handle
-        type="target"
+        type={inputType}
         position={Position.Left}
         id="left"
         className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-background"
       />
       <Handle
-        type="target"
+        type={inputType}
         position={Position.Top}
         id="top"
         className="!h-3 !w-3 !rounded-full !border-2 !border-blue-500 !bg-background"

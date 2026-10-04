@@ -222,12 +222,13 @@ function CircuitCanvasInner({
       e.preventDefault();
 
       const equipmentId = e.dataTransfer.getData("application/equipment");
-      if (!equipmentId || !reactFlowWrapper.current) return;
+      if (!equipmentId) return;
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      // screenToFlowPosition takes raw screen coordinates; it already
+      // accounts for the canvas offset, pan and zoom.
       const position = screenToFlowPosition({
-        x: e.clientX - reactFlowBounds.left,
-        y: e.clientY - reactFlowBounds.top,
+        x: e.clientX,
+        y: e.clientY,
       });
 
       onEquipmentDrop(equipmentId, position.x, position.y);
@@ -260,6 +261,9 @@ function CircuitCanvasInner({
         onDrop={onDrop}
         nodeTypes={nodeTypes}
         fitView
+        // The canvas starts empty, so fitView fires on the first drop; cap
+        // the zoom so one component does not fill the canvas.
+        fitViewOptions={{ maxZoom: 1 }}
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode={null}
         snapToGrid

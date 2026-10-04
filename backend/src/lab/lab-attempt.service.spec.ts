@@ -1,6 +1,6 @@
 import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { LabAttemptService, pickBestAttempt } from './lab-attempt.service';
-import { LabService } from './lab.service';
+import { LabService, deriveLabStatus } from './lab.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { StudentCircuitDto } from './dto/lab.dto';
 
@@ -202,6 +202,46 @@ describe('pickBestAttempt', () => {
 
     expect(pickBestAttempt(attempts)?.id).toBe('early');
     expect(pickBestAttempt([])).toBeNull();
+  });
+});
+
+describe('deriveLabStatus', () => {
+  it('derives the status from student submissions', () => {
+    expect(deriveLabStatus(0, 0)).toBe('NOT_STARTED');
+    expect(deriveLabStatus(3, 0)).toBe('IN_PROGRESS');
+    expect(deriveLabStatus(3, 1)).toBe('COMPLETED');
+  });
+});
+
+describe('LabService.findByInstructor', () => {
+  it('replaces the stored status with one derived from submissions', async () => {
+    const lab = (id: string) => ({ id, completionStatus: 'NOT_STARTED' });
+    const prisma = {
+      labInstance: {
+        findMany: jest.fn().mockResolvedValue([lab('a'), lab('b'), lab('c')]),
+      },
+      labAttempt: {
+        groupBy: jest.fn().mockResolvedValue([
+          { labId: 'a', passed: false, _count: { _all: 2 } },
+          { labId: 'b', passed: false, _count: { _all: 1 } },
+          { labId: 'b', passed: true, _count: { _all: 1 } },
+        ]),
+      },
+    };
+    const service = new LabService(prisma as unknown as PrismaService);
+
+    const labs = await service.findByInstructor('instructor-1');
+
+    expect(labs.map((l) => [l.id, l.completionStatus])).toEqual([
+      ['a', 'IN_PROGRESS'],
+      ['b', 'COMPLETED'],
+      ['c', 'NOT_STARTED'],
+    ]);
+    expect(prisma.labAttempt.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { lab: { instructorId: 'instructor-1' } },
+      }),
+    );
   });
 });
 

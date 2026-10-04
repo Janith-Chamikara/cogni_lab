@@ -25,6 +25,23 @@ export type LabActor = {
   isAdmin: boolean;
 };
 
+export type LabStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
+/**
+ * A lab's status as the instructor sees it, derived from student submissions
+ * (LabAttempt rows): none yet, submitted but not passed, or passed by at
+ * least one student. The stored completionStatus column is never updated.
+ */
+export const deriveLabStatus = (
+  attemptCount: number,
+  passedCount: number,
+): LabStatus =>
+  passedCount > 0
+    ? 'COMPLETED'
+    : attemptCount > 0
+      ? 'IN_PROGRESS'
+      : 'NOT_STARTED';
+
 @Injectable()
 export class LabService {
   constructor(private readonly prisma: PrismaService) {}
@@ -172,6 +189,36 @@ export class LabService {
   }
 
   async findByInstructor(instructorId: string) {
+    const [labs, attemptGroups] = await Promise.all([
+      this.findInstructorLabs(instructorId),
+      this.prisma.labAttempt.groupBy({
+        by: ['labId', 'passed'],
+        where: { lab: { instructorId } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const counts = new Map<string, { attempts: number; passed: number }>();
+    for (const group of attemptGroups) {
+      const entry = counts.get(group.labId) ?? { attempts: 0, passed: 0 };
+      entry.attempts += group._count._all;
+      if (group.passed) entry.passed += group._count._all;
+      counts.set(group.labId, entry);
+    }
+
+    return labs.map((lab) => {
+      const entry = counts.get(lab.id);
+      return {
+        ...lab,
+        completionStatus: deriveLabStatus(
+          entry?.attempts ?? 0,
+          entry?.passed ?? 0,
+        ),
+      };
+    });
+  }
+
+  private findInstructorLabs(instructorId: string) {
     return this.prisma.labInstance.findMany({
       where: { instructorId },
       include: {
@@ -322,13 +369,16 @@ export class LabService {
       this.prisma.labInstance.count({
         where: { instructorId },
       }),
+      // Student submissions are stored as LabAttempt rows (the Submit button).
+      // completionStatus and ExperimentProgress are never written, so they
+      // cannot drive these numbers.
       this.prisma.labInstance.count({
         where: {
           instructorId,
-          completionStatus: 'IN_PROGRESS',
+          labAttempts: { some: {} },
         },
       }),
-      this.prisma.experimentProgress.count({
+      this.prisma.labAttempt.count({
         where: {
           lab: {
             instructorId,

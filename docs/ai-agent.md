@@ -31,6 +31,7 @@ flowchart LR
 | Component | Responsibility |
 | --- | --- |
 | `frontend/components/ai-chat-widget.tsx` | Conversation UI, authentication token, cancellation, retry, session history and successful-check indicators |
+| `frontend/components/ai-message-content.tsx` | Restricted Markdown rendering and readable assistant message typography |
 | `frontend/lib/ai-context.ts` | Route-isolated page context, page excerpt cleanup and bounded request construction |
 | `frontend/lib/ai-guidance.ts` | Collect rendered targets, retain local element references and validate guidance before execution |
 | `frontend/components/ai-guidance-overlay.tsx` | Independent blue cursor, target tracking, circle/arrow drawing, dismissal and cancellation |
@@ -50,6 +51,10 @@ The global Clerk authentication guard protects the AI endpoint. The AI module im
 The browser supplies workspace identities and wire endpoints, not trusted component values, grading rules or instructions. The backend reads equipment labels, configuration, procedures, tolerances and validation rules from the saved lab. It checks that every supplied component belongs to that lab. This preserves the distinction between the student's actual circuit and the instructor's reference circuit.
 
 The selected step is supplied with its full procedure and tolerance fields, subject to documented text limits. The assistant starts with a useful hint when a student is stuck, explains why a step matters and provides a fuller answer when requested. It can direct the student to **Get Help** for the instructor's reference, **Wire Mode** for connections, **Check Progress** for an unsaved check and **Submit** for an actual submission.
+
+The assistant speaks as a patient teaching helper: natural contractions, plain explanations and acknowledgement of frustration without scripted greetings or unsupported praise. It begins with a direct answer and uses up to three short sections when the question needs them. Troubleshooting focuses on one evidenced issue and a manageable check. Calculations separate inputs, formula and result, with explicit units and provenance. Responses normally stay under 180 words; short questions do not require a fixed template. Visual guidance reasons address the student directly, and guidance-only replies follow the same conversational style without an additional model call.
+
+Assistant messages render paragraphs, restrained headings, emphasis, numbered steps, bullets and formula blocks. All heading levels use the same compact section treatment in the chat. Formulas can scroll horizontally, long text wraps and check metadata appears as small badges beneath the answer. User messages remain literal text. Existing plain-text session history still displays with preserved line breaks. The welcome message, progress text and input prompt use the same teaching tone.
 
 Claims about circuit correctness should use `inspect_workspace`. Rule-based results can describe the supported topology and instructor criteria. Legacy results check equipment, counts and steps; they do not establish electrical correctness. Neither mode supplies real instrument readings. Completed steps are student-reported progress.
 
@@ -192,7 +197,7 @@ When no preferred model is configured, the agent uses `openrouter/free`. If the 
 
 Provider implementation follows [OpenRouter's tool-calling contract](https://openrouter.ai/docs/guides/features/tool-calling). The [free models router](https://openrouter.ai/openrouter/free) selects models compatible with the requested features. Tool definitions accompany every inference, and provider reasoning details are preserved between tool turns when supplied.
 
-The merged validation feature requires its existing Prisma migration, `20261003111015_circuit_validation`, to be applied by the team's normal migration process before using those services. This AI change adds no schema migration or dependency.
+The merged validation feature requires its existing Prisma migration, `20261003111015_circuit_validation`, to be applied by the team's normal migration process before using those services. The agent adds no schema migration. The frontend adds `react-markdown` for the AI message renderer; no raw-HTML, math, syntax-highlighting or other Markdown plugins are used.
 
 ## Local preview build
 
@@ -223,7 +228,7 @@ History is stored in browser `sessionStorage`, keyed by signed-in user and route
 
 The route context is replaced rather than merged with old lab data, and unmount cleanup removes it. A route mismatch also prevents stale context from being read. The API receives bounded conversation text, current workspace identifiers and a short page excerpt. It does not receive the Clerk user profile, credentials or unrelated lab records. API keys remain on the server.
 
-Model replies are rendered as React text with preserved line breaks. HTML is not executed. Page and lab text are treated as data, and the backend policy instructs the model to disregard embedded attempts to override it. These controls reduce errors but do not guarantee the correctness of every generated explanation.
+Model replies are rendered with `react-markdown` using an explicit allowlist of text-formatting elements and `skipHtml`. Raw HTML is ignored; links become their label text and images are omitted. There are no executable HTML, embedded resources or model-generated clickable links in answers. React escapes text, including code blocks. User messages render directly as React text. Page and lab text are treated as data, and the backend policy instructs the model to disregard embedded attempts to override it. These controls reduce errors but do not guarantee the correctness of every generated explanation.
 
 ## Validation record
 
@@ -237,6 +242,7 @@ Validated on 2026-10-05:
 - A live synthetic OpenRouter calculation check. The configured model returned 404; the free-router retry used `calculate` and returned 0.005 A / 5 mA for 5 V across 1,000 Ω.
 - Ten temporary guidance checks covering safe action boundaries, ambiguous destinations, rejected/oversized inventories, single-inference guidance, inspected error evidence, rejected legacy/step-only diagnoses, hidden controls, canvas terminals/straight wires, changed routes/workspaces/labels/destinations, post-animation rechecks and cancellation. The React overlay check verified blue SVG drawing, moving target bounds, Escape cancellation and the delayed navigation action.
 - Live synthetic provider checks returned a point proposal for **Where is Get Help?** and an allowed navigation proposal for **Open Ohm Lab**. The configured model again returned 404; the existing free-router fallback handled both requests.
+- Six temporary presentation checks covered semantic answer structure, formula scrolling, plain-text history, Markdown preservation through the server/chat/session flow, evidence badges, user text escaping and exclusion of raw HTML, scripts, links and images. AI frontend type checking, ESLint and the backend build passed. A live synthetic teaching question returned a concise explanation with emphasized labels, formula/substitution blocks and a focused follow-up question through the existing provider fallback.
 
 The added validation scripts and fixtures were removed after use and are not part of the commits. Existing upstream tests were preserved.
 

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
 import { usePathname, useRouter } from "next/navigation";
-import { RotateCcw, Send, Square, X } from "lucide-react";
+import { Check, RotateCcw, Send, Square, X } from "lucide-react";
 import {
   buildChatRequest,
   getAiPageContext,
@@ -17,12 +17,13 @@ import {
   executeGuidance,
 } from "@/lib/ai-guidance";
 import { AiGuidanceOverlay } from "./ai-guidance-overlay";
+import { AiMessageContent } from "./ai-message-content";
 
 type Message = AiChatMessage & { toolsUsed?: string[] };
 const welcome: Message = {
   role: "assistant",
   content:
-    "Hi! I can explain lab steps, help troubleshoot your circuit, and show you where things are with a blue pointer. You stay in control of your experiment.",
+    "Hi! What are you working on today?\n\nWe can work through a tricky step, check a calculation, or look at what’s happening in your circuit. If you can’t find a control, I can point it out in blue.\n\nTell me where you’re stuck, and we’ll take it one step at a time.",
 };
 const evidenceLabels: Record<string, string> = {
   inspect_lab: "Lab guide consulted",
@@ -143,11 +144,11 @@ function ChatSession({
     try {
       const snapshot = collectGuidanceSnapshot(content);
       const token = await getToken();
-      if (!token) throw new Error("Please sign in again to continue chatting.");
+      if (!token) throw new Error("Sign in again, then we can continue.");
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
       if (!baseUrl)
         throw new Error(
-          "The assistant is not configured yet. Please contact your instructor.",
+          "I’m not set up here yet. Please let your instructor know.",
         );
       controller.signal.throwIfAborted();
       const response = await fetch(`${baseUrl}/ai/chat`, {
@@ -166,18 +167,18 @@ function ChatSession({
       });
       if (!response.ok) {
         const errors: Record<number, string> = {
-          400: "The lab context could not be read. Try refreshing the lab and asking again.",
-          401: "Your session expired. Please sign in again.",
-          403: "You do not have access to this assistant request.",
+          400: "I couldn’t read your current lab setup. Refresh the lab, then ask again.",
+          401: "Your sign-in has expired. Sign in again, then we can continue.",
+          403: "This request isn’t available to your account. Please check with your instructor.",
           404: "This lab is no longer available. Return to your dashboard and reopen it.",
-          429: "The assistant is busy. Please wait a moment and retry.",
-          502: "The assistant could not finish its answer. Please retry or ask a shorter question.",
-          503: "The assistant is temporarily unavailable. Please retry shortly.",
-          504: "The assistant took too long. Please retry or ask a shorter question.",
+          429: "I’m busy right now. Give it a moment, then try again.",
+          502: "I couldn’t finish that answer. Try again, or ask about one part at a time.",
+          503: "I can’t connect right now. Please try again shortly.",
+          504: "That took longer than expected. Try again, or ask about one part at a time.",
         };
         throw new Error(
           errors[response.status] ??
-            "The assistant could not respond. Please retry.",
+            "I couldn’t respond just now. Please try again.",
         );
       }
       const data: unknown = await response.json();
@@ -187,11 +188,9 @@ function ChatSession({
         guidance?: unknown;
       } | null;
       if (!result || typeof result.reply !== "string" || !result.reply.trim())
-        throw new Error(
-          "The assistant returned an empty answer. Please retry.",
-        );
+        throw new Error("I couldn’t finish that answer. Please try again.");
       if (requestRef.current !== controller) return;
-      const reply = result.reply.replace(/\*\*/g, "").trim().slice(0, 4000);
+      const reply = result.reply.trim().slice(0, 4000);
       const toolsUsed = Array.isArray(result.toolsUsed)
         ? result.toolsUsed.filter(
             (tool): tool is string =>
@@ -239,14 +238,14 @@ function ChatSession({
       if (requestRef.current !== controller) return;
       setError(
         controller.signal.aborted
-          ? "Response stopped. Retry when you are ready."
+          ? "Stopped. You can retry when you’re ready."
           : failure instanceof Error && failure.name === "TimeoutError"
-            ? "The assistant took too long. Please retry."
+            ? "That took longer than expected. Please try again."
             : failure instanceof TypeError
-              ? "Could not reach the assistant. Check your connection and retry."
+              ? "I couldn’t connect. Check your connection, then try again."
               : failure instanceof Error
                 ? failure.message
-                : "The assistant could not respond. Please retry.",
+                : "I couldn’t respond just now. Please try again.",
       );
     } finally {
       if (requestRef.current === controller) {
@@ -347,7 +346,7 @@ function ChatSession({
             aria-label="Conversation"
             aria-live="polite"
             aria-relevant="additions"
-            className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4"
+            className="min-h-0 flex-1 space-y-5 overflow-y-auto bg-muted/20 p-4"
           >
             {messages.map((message, index) => (
               <div
@@ -355,19 +354,32 @@ function ChatSession({
                 className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}
               >
                 <div
-                  className={`max-w-[92%] whitespace-pre-wrap break-words rounded-xl px-3 py-2 text-sm leading-relaxed ${message.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}
+                  className={`min-w-0 rounded-2xl text-sm ${message.role === "user" ? "max-w-[88%] whitespace-pre-wrap break-words rounded-br-md bg-primary px-3.5 py-2.5 leading-relaxed text-primary-foreground" : "w-full rounded-bl-md border border-border/60 bg-background px-4 py-3.5 text-foreground shadow-sm"}`}
                 >
                   <span className="sr-only">
                     {message.role === "user" ? "You: " : "Assistant: "}
                   </span>
-                  {message.content}
+                  {message.role === "assistant" ? (
+                    <AiMessageContent content={message.content} />
+                  ) : (
+                    message.content
+                  )}
                 </div>
                 {Boolean(message.toolsUsed?.length) && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    {message.toolsUsed
-                      ?.map((tool) => evidenceLabels[tool])
-                      .join(" · ")}
-                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {message.toolsUsed?.map((tool) => (
+                      <span
+                        key={tool}
+                        className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-[10px] text-muted-foreground"
+                      >
+                        <Check
+                          aria-hidden="true"
+                          className="h-3 w-3 text-primary"
+                        />
+                        {evidenceLabels[tool]}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
             ))}
@@ -376,7 +388,7 @@ function ChatSession({
                 role="status"
                 className="animate-pulse text-xs text-muted-foreground"
               >
-                Checking your question…
+                Let’s take a look…
               </p>
             )}
             {error && (
@@ -435,7 +447,7 @@ function ChatSession({
                 }}
                 maxLength={4000}
                 rows={2}
-                placeholder="Ask about your lab…"
+                placeholder="What would you like a hand with?"
                 aria-label="Message to lab assistant"
                 className="max-h-28 min-h-16 min-w-0 flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-primary"
               />

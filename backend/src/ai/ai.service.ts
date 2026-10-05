@@ -242,7 +242,7 @@ export class AiService {
             (item) => item.id === guidance!.targetId,
           )!;
           return {
-            reply: `${guidance.mode === 'click' ? 'I can open' : 'I’ll show you'} ${guidance.mode === 'click' ? target.label.replace(/^Open\s+/i, '') : target.label}. ${guidance.reason}`,
+            reply: `${guidance.mode === 'click' ? 'Let’s open' : 'I’ll point out'} **${guidance.mode === 'click' ? target.label.replace(/^Open\s+/i, '') : target.label}**.\n\n${guidance.reason}`,
             toolsUsed: [...usedTools],
             guidance,
           };

@@ -14,6 +14,10 @@ import {
   TestTube2,
   XCircle,
   Info,
+  Lightbulb,
+  Send,
+  AlertTriangle,
+  Trophy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,9 +32,25 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { Lab, ExperimentStep, LabEquipment } from "@/lib/types";
+import type {
+  Lab,
+  ExperimentStep,
+  LabAttempt,
+  StudentAction,
+  StudentCircuitPayload,
+  ValidationResult,
+  WireConnection,
+} from "@/lib/types";
+import {
+  getMyLabAttempts,
+  submitLabAttempt,
+  validateLabCircuit,
+} from "@/lib/actions";
 import { StudentCircuitCanvas } from "@/components/student/student-circuit-canvas";
-import { StudentEquipmentSidebar } from "@/components/student/student-equipment-sidebar";
+import {
+  StudentEquipmentSidebar,
+  getPlacementDisplayName,
+} from "@/components/student/student-equipment-sidebar";
 import { WIRE_COLORS } from "@/components/lab/circuit-canvas/constants";
 import {
   Tooltip,
@@ -38,6 +58,17 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
+import { buildLabContext } from "@/lib/ai-context";
+import { useAiPageContext } from "@/hooks/use-ai-page-context";
+
+const wireKey = (conn: WireConnection) =>
+  `${conn.sourceEquipmentId}.${conn.sourceHandle}|${conn.targetEquipmentId}.${conn.targetHandle}`;
+
+const wireEnds = (conn: WireConnection) => ({
+  from: `${conn.sourceEquipmentId}.${conn.sourceHandle}`,
+  to: `${conn.targetEquipmentId}.${conn.targetHandle}`,
+});
 
 interface StudentLabEditorProps {
   lab: Lab;
@@ -55,40 +86,90 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
   const [selectedWireColor, setSelectedWireColor] = React.useState<string>(
     WIRE_COLORS[0]?.value ?? "#374151",
   );
-  const [validationResults, setValidationResults] = React.useState<{
-    isValid: boolean;
-    score: number;
-    feedback: string[];
-    errors: string[];
-  } | null>(null);
+  const [showHelpDialog, setShowHelpDialog] = React.useState(false);
+  const [validationResult, setValidationResult] =
+    React.useState<ValidationResult | null>(null);
+  const [resultSource, setResultSource] = React.useState<"check" | "submit">(
+    "check",
+  );
   const [showValidation, setShowValidation] = React.useState(false);
+  const [isChecking, setIsChecking] = React.useState(false);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [requestError, setRequestError] = React.useState<string | null>(null);
+  const [bestAttempt, setBestAttempt] = React.useState<LabAttempt | null>(
+    null,
+  );
+  // Analytics only: grading always uses the final circuit state.
+  const actionLogRef = React.useRef<StudentAction[]>([]);
+
+  const logAction = React.useCallback(
+    (action: Omit<StudentAction, "timestamp">) => {
+      actionLogRef.current.push({
+        ...action,
+        timestamp: new Date().toISOString(),
+      });
+    },
+    [],
+  );
+
+  React.useEffect(() => {
+    getMyLabAttempts(lab.id).then((result) => {
+      if (result.data) setBestAttempt(result.data.bestAttempt);
+    });
+  }, [lab.id]);
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
   const totalSteps = steps.length;
   const progressPercentage =
     totalSteps > 0 ? (completedSteps.size / totalSteps) * 100 : 0;
-  const allEquipments =
-    lab.labEquipments?.map((le) => le.equipment).filter(Boolean) || [];
-  const expectedEquipments = lab.labEquipments || [];
-  const expectedConnections = lab.wireConnections || [];
+  const expectedEquipments = React.useMemo(
+    () => lab.labEquipments || [],
+    [lab.labEquipments],
+  );
 
+  useAiPageContext({
+    pageType: "student-lab",
+    lab: buildLabContext(lab),
+    student: {
+      currentStepIndex,
+      totalSteps,
+      completedStepIds: [...completedSteps]
+        .map((index) => steps[index]?.id)
+        .filter((id): id is string => Boolean(id)),
+    },
+    workspace: {
+      components: placedEquipments,
+      connections: wireConnections,
+      completedStepIds: [],
+    },
+  });
+
+  // The sidebar drags a lab placement id, so each student component knows
+  // which required component (R1, R2, ...) it is.
   const handleEquipmentDrop = React.useCallback(
-    (equipmentId: string, x: number, y: number) => {
-      const equipment = allEquipments.find((eq) => eq?.id === equipmentId);
-      if (equipment) {
+    (placementId: string, x: number, y: number) => {
+      const placement = expectedEquipments.find((le) => le.id === placementId);
+      if (placement?.equipment) {
         const newPlacement = {
           id: `student-${Date.now()}`,
-          equipmentId: equipment.id,
+          equipmentId: placement.equipmentId,
+          labEquipmentId: placement.id,
           positionX: x,
           positionY: y,
           positionZ: placedEquipments.length,
-          equipment,
+          configJson: placement.configJson ?? null,
+          // Display only: the canvas node shows the component label/value.
+          equipment: {
+            ...placement.equipment,
+            equipmentName: getPlacementDisplayName(placement),
+          },
         };
         setPlacedEquipments((prev) => [...prev, newPlacement]);
+        logAction({ action: "ADD", componentId: newPlacement.id });
       }
     },
-    [allEquipments, placedEquipments.length],
+    [expectedEquipments, placedEquipments.length, logAction],
   );
 
   const handleEquipmentMove = React.useCallback(
@@ -105,6 +186,8 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
   const handleEquipmentRemove = React.useCallback(
     (index: number) => {
       const removedEquipment = placedEquipments[index];
+      if (!removedEquipment) return;
+      logAction({ action: "REMOVE", componentId: removedEquipment.id });
       setPlacedEquipments((prev) => prev.filter((_, i) => i !== index));
       setWireConnections((prev) =>
         prev.filter(
@@ -114,12 +197,27 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
         ),
       );
     },
-    [placedEquipments],
+    [placedEquipments, logAction],
   );
 
-  const handleConnectionsChange = React.useCallback((connections: any[]) => {
-    setWireConnections(connections);
-  }, []);
+  const handleConnectionsChange = React.useCallback(
+    (connections: any[]) => {
+      const before = new Set(wireConnections.map(wireKey));
+      const after = new Set(connections.map(wireKey));
+      for (const conn of connections) {
+        if (!before.has(wireKey(conn))) {
+          logAction({ action: "CONNECT", ...wireEnds(conn) });
+        }
+      }
+      for (const conn of wireConnections) {
+        if (!after.has(wireKey(conn))) {
+          logAction({ action: "DISCONNECT", ...wireEnds(conn) });
+        }
+      }
+      setWireConnections(connections);
+    },
+    [wireConnections, logAction],
+  );
 
   const handleCompleteStep = () => {
     // Toggle completion status
@@ -131,7 +229,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
         newSet.add(currentStepIndex);
         // If it's the last step and marking as complete, check progress
         if (currentStepIndex === steps.length - 1) {
-          setTimeout(() => handleCheckProgress(), 300);
+          setTimeout(() => handleCheckProgress(newSet), 300);
         }
       }
       return newSet;
@@ -179,165 +277,179 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
     router.push("/student/dashboard");
   };
 
-  const handleCheckProgress = () => {
-    const feedback: string[] = [];
-    const errors: string[] = [];
-    let score = 0;
-    let totalChecks = 0;
+  const buildPayload = (
+    stepsDone: Set<number> = completedSteps,
+  ): StudentCircuitPayload => ({
+    components: placedEquipments.map((eq) => ({
+      id: eq.id,
+      equipmentId: eq.equipmentId,
+      labEquipmentId: eq.labEquipmentId,
+      positionX: eq.positionX,
+      positionY: eq.positionY,
+    })),
+    connections: wireConnections.map((conn) => ({
+      sourceEquipmentId: conn.sourceEquipmentId,
+      targetEquipmentId: conn.targetEquipmentId,
+      sourceHandle: conn.sourceHandle,
+      targetHandle: conn.targetHandle,
+      wireColor: conn.wireColor,
+    })),
+    completedStepIds: [...stepsDone]
+      .map((index) => steps[index]?.id)
+      .filter((id): id is string => Boolean(id)),
+  });
 
-    // Check if correct number of equipment is placed
-    totalChecks++;
-    if (placedEquipments.length >= expectedEquipments.length) {
-      score++;
-      feedback.push(
-        `✓ You have placed ${placedEquipments.length} equipment items`,
-      );
-    } else {
-      errors.push(
-        `✗ Missing equipment: You have ${placedEquipments.length}/${expectedEquipments.length} items`,
-      );
+  const handleCheckProgress = async (stepsDone?: Set<number>) => {
+    setIsChecking(true);
+    setRequestError(null);
+    const result = await validateLabCircuit(lab.id, buildPayload(stepsDone));
+    setIsChecking(false);
+
+    if (result.error || !result.data) {
+      setRequestError(result.error ?? "Failed to check your circuit.");
+      return;
     }
-
-    // Check if all required equipment types are present
-    totalChecks++;
-    const expectedTypes = expectedEquipments.map((e) => e.equipmentId);
-    const placedTypes = placedEquipments.map((e) => e.equipmentId);
-    const missingTypes = expectedTypes.filter(
-      (type) => !placedTypes.includes(type),
-    );
-
-    if (missingTypes.length === 0) {
-      score++;
-      feedback.push("✓ All required equipment types are present");
-    } else {
-      const missingEquipment = expectedEquipments
-        .filter((e) => missingTypes.includes(e.equipmentId))
-        .map((e) => e.equipment?.equipmentName)
-        .filter(Boolean);
-      errors.push(`✗ Missing equipment: ${missingEquipment.join(", ")}`);
-    }
-
-    // Check connections
-    totalChecks++;
-    if (expectedConnections.length > 0) {
-      if (wireConnections.length >= expectedConnections.length) {
-        score++;
-        feedback.push(`✓ You have ${wireConnections.length} connections`);
-      } else {
-        errors.push(
-          `✗ Missing connections: You have ${wireConnections.length}/${expectedConnections.length} connections`,
-        );
-      }
-    } else {
-      if (wireConnections.length > 0) {
-        score++;
-        feedback.push(
-          `✓ You have created ${wireConnections.length} connections`,
-        );
-      } else {
-        feedback.push("ℹ No connections created yet");
-      }
-    }
-
-    // Check step completion
-    totalChecks++;
-    if (completedSteps.size === totalSteps) {
-      score++;
-      feedback.push("✓ All steps completed");
-    } else {
-      errors.push(
-        `✗ Complete all steps: ${completedSteps.size}/${totalSteps} done`,
-      );
-    }
-
-    const finalScore = Math.round((score / totalChecks) * 100);
-    const isValid = score === totalChecks;
-
-    setValidationResults({
-      isValid,
-      score: finalScore,
-      feedback,
-      errors,
-    });
+    setValidationResult(result.data);
+    setResultSource("check");
     setShowValidation(true);
   };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setRequestError(null);
+    const result = await submitLabAttempt(lab.id, {
+      ...buildPayload(),
+      actionLog: actionLogRef.current,
+    });
+    setIsSubmitting(false);
+
+    if (result.error || !result.data) {
+      setRequestError(result.error ?? "Failed to submit your lab.");
+      return;
+    }
+    setValidationResult(result.data.result);
+    setBestAttempt(result.data.bestAttempt);
+    setResultSource("submit");
+    setShowValidation(true);
+  };
+
+  const resultChecks = validationResult
+    ? Object.values(validationResult.checks)
+    : [];
+  // Detailed issues that are not already shown as a check message.
+  const resultIssues = validationResult
+    ? validationResult.errors.filter(
+        (msg) => !resultChecks.some((check) => check.message === msg),
+      )
+    : [];
 
   return (
     <div className="flex max-w-7xl mx-auto h-screen flex-col">
       {/* Validation Results Dialog */}
-      {showValidation && validationResults && (
+      {showValidation && validationResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <Card className="w-full max-w-2xl mx-4 max-h-[80vh] overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
-                  <TestTube2 className="h-5 w-5" />
-                  Progress Check Results
+                  {resultSource === "submit" ? (
+                    <Send className="h-5 w-5" />
+                  ) : (
+                    <TestTube2 className="h-5 w-5" />
+                  )}
+                  {resultSource === "submit"
+                    ? "Submission Results"
+                    : "Progress Check Results"}
                 </CardTitle>
                 <Badge
-                  variant={validationResults.isValid ? "default" : "secondary"}
-                  className={validationResults.isValid ? "bg-green-500" : ""}
+                  variant={validationResult.passed ? "default" : "secondary"}
+                  className={validationResult.passed ? "bg-green-500" : ""}
                 >
-                  Score: {validationResults.score}%
+                  Score: {validationResult.score}%
                 </Badge>
               </div>
               <CardDescription>
-                Review your lab setup and progress
+                {resultSource === "submit"
+                  ? "Your circuit has been submitted and graded."
+                  : "Review your circuit before submitting. This check is not saved."}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Success feedback */}
-              {validationResults.feedback.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="font-semibold text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Correct
-                  </h3>
-                  <div className="space-y-1">
-                    {validationResults.feedback.map((msg, idx) => (
-                      <Alert
-                        key={idx}
-                        className="bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
-                      >
-                        <AlertDescription className="text-sm">
-                          {msg}
-                        </AlertDescription>
-                      </Alert>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* One line per check: ✓ passed / ✗ failed */}
+              <div className="space-y-1">
+                {resultChecks.map((check) => (
+                  <Alert
+                    key={check.label}
+                    variant={check.passed ? "default" : "destructive"}
+                    className={
+                      check.passed
+                        ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
+                        : ""
+                    }
+                  >
+                    <AlertDescription className="flex items-center gap-2 text-sm">
+                      {check.passed ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 shrink-0" />
+                      )}
+                      {check.message}
+                    </AlertDescription>
+                  </Alert>
+                ))}
+              </div>
 
-              {/* Error feedback */}
-              {validationResults.errors.length > 0 && (
+              {/* Details for failed checks, e.g. "R3 is not connected" */}
+              {resultIssues.length > 0 && (
                 <div className="space-y-2">
                   <h3 className="font-semibold text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
                     <XCircle className="h-4 w-4" />
                     Needs Attention
                   </h3>
-                  <div className="space-y-1">
-                    {validationResults.errors.map((msg, idx) => (
-                      <Alert key={idx} variant="destructive">
-                        <AlertDescription className="text-sm">
-                          {msg}
-                        </AlertDescription>
-                      </Alert>
+                  <ul className="space-y-1 text-sm">
+                    {resultIssues.map((msg, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-red-600 dark:text-red-400">
+                          ✗
+                        </span>
+                        {msg}
+                      </li>
                     ))}
-                  </div>
+                  </ul>
+                </div>
+              )}
+
+              {validationResult.warnings.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4" />
+                    Warnings
+                  </h3>
+                  <ul className="space-y-1 text-sm text-muted-foreground">
+                    {validationResult.warnings.map((msg, idx) => (
+                      <li key={idx}>{msg}</li>
+                    ))}
+                  </ul>
                 </div>
               )}
 
               {/* Final verdict */}
               <Separator />
-              <div className="flex items-center justify-between">
-                <div>
-                  {validationResults.isValid ? (
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-1">
+                  {validationResult.passed ? (
                     <p className="text-sm font-medium text-green-600 dark:text-green-400">
                       🎉 Excellent! Lab setup is complete and correct.
                     </p>
                   ) : (
                     <p className="text-sm font-medium text-amber-600 dark:text-amber-400">
                       Keep going! Review the feedback and make adjustments.
+                    </p>
+                  )}
+                  {resultSource === "submit" && bestAttempt && (
+                    <p className="text-xs text-muted-foreground">
+                      Your best attempt counts for the grade: {bestAttempt.score}
+                      %
                     </p>
                   )}
                 </div>
@@ -366,13 +478,42 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {requestError && (
+                <span className="text-xs text-red-600 dark:text-red-400">
+                  {requestError}
+                </span>
+              )}
+              {bestAttempt && (
+                <Badge variant="outline" className="gap-1">
+                  <Trophy className="h-3 w-3" />
+                  Best: {bestAttempt.score}%
+                </Badge>
+              )}
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={handleCheckProgress}
+                onClick={() => handleCheckProgress()}
+                disabled={isChecking || isSubmitting}
               >
                 <TestTube2 className="h-4 w-4 mr-2" />
-                Check Progress
+                {isChecking ? "Checking..." : "Check Progress"}
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSubmit}
+                disabled={isChecking || isSubmitting}
+              >
+                <Send className="h-4 w-4 mr-2" />
+                {isSubmitting ? "Submitting..." : "Submit"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHelpDialog(true)}
+                data-ai-action="help"
+              >
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Get Help
               </Button>
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
@@ -559,7 +700,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
 
             <div className="ml-auto text-sm text-muted-foreground">
               {isWireMode
-                ? "Drag from a green handle to a blue handle to connect"
+                ? "Drag from any terminal to another terminal to connect"
                 : "Drag components from the right sidebar to build your circuit"}
             </div>
           </div>
@@ -648,8 +789,15 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
         </div>
 
         {/* Right Sidebar - Equipment */}
-        <StudentEquipmentSidebar equipments={allEquipments} />
+        <StudentEquipmentSidebar placements={expectedEquipments} />
       </div>
+
+      {/* Help Dialog */}
+      <InstructorLabHelpDialog
+        lab={lab}
+        isOpen={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
+      />
     </div>
   );
 }

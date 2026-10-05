@@ -45,6 +45,7 @@ model User {
   createdLabs         LabInstance[]
   createdEquipments   LabEquipment[]
   experimentProgress  ExperimentProgress[]
+  labAttempts         LabAttempt[]
 
   @@map("users")
 }
@@ -77,7 +78,9 @@ model LabInstance {
   toleranceMax        Decimal?
   toleranceUnit       String?
   completionStatus    LabCompletionStatus @default(NOT_STARTED)
-  createdAt           DateTime @default(now())
+  // Instructor-defined circuit grading rules. Null means legacy grading.
+  circuitRulesJson    Json?
+  createdAt          DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   // Relations
@@ -87,6 +90,7 @@ model LabInstance {
   experimentProgress  ExperimentProgress[]
   labEquipments LabInstanceEquipment[]
   wireConnections WireConnection[]
+  labAttempts     LabAttempt[]
 
   @@map("lab_instances")
 }
@@ -187,6 +191,28 @@ model ExperimentProgress {
   step                ExperimentStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 
   @@map("experiment_progress")
+}
+
+// One row per student submission. The circuit state is the source of truth
+// for grading; the action log is stored for analytics only.
+model LabAttempt {
+  id                   String   @id @default(uuid())
+  labId                String
+  userId               String
+  circuitStateJson     Json
+  actionLogJson        Json?
+  validationResultJson Json
+  validationMode       String   // "rules" | "legacy"
+  score                Int
+  passed               Boolean
+  submittedAt          DateTime @default(now())
+
+  // Relations
+  lab                  LabInstance @relation(fields: [labId], references: [id], onDelete: Cascade)
+  user                 User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([labId, userId])
+  @@map("lab_attempts")
 }
 
 

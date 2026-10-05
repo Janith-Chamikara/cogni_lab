@@ -174,3 +174,78 @@ export class UpdateWireConnectionsDto {
   @Type(() => WireConnectionDto)
   connections: WireConnectionDto[];
 }
+
+// ---- Circuit validation ---------------------------------------------------
+
+export class UpdateCircuitRulesDto {
+  // Null clears the rules and returns the lab to legacy grading.
+  // Shape is validated by normalizeCircuitRules in the service.
+  @IsOptional()
+  @IsObject()
+  rules: Record<string, unknown> | null;
+}
+
+export class StudentComponentDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  equipmentId: string;
+
+  @IsOptional()
+  @IsString()
+  labEquipmentId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  positionX?: number;
+
+  @IsOptional()
+  @IsNumber()
+  positionY?: number;
+}
+
+export class StudentActionDto {
+  @IsString()
+  action: string;
+
+  @IsOptional()
+  @IsString()
+  componentId?: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
+}
+
+export class StudentCircuitDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentComponentDto)
+  components: StudentComponentDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WireConnectionDto)
+  connections: WireConnectionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  completedStepIds?: string[];
+
+  // Analytics only; never used for grading.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentActionDto)
+  actionLog?: StudentActionDto[];
+}

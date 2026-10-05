@@ -2,13 +2,21 @@
 
 import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, Save, Trash2, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Play,
+  Save,
+  Trash2,
+  Settings,
+  ListChecks,
+} from "lucide-react";
 import {
   Lab,
   LabEquipment,
   EquipmentPlacement,
   ExperimentStep,
   WireConnection,
+  CircuitRules,
 } from "@/lib/types";
 import {
   updateLabEquipments,
@@ -24,6 +32,7 @@ import {
 import { StepsSidebar } from "@/components/lab/steps-sidebar";
 import { ThresholdsDialog } from "@/components/lab/thresholds-dialog";
 import { EquipmentConfigDialog } from "@/components/lab/equipment-config-dialog";
+import { ValidationRulesDialog } from "@/components/lab/validation-rules-dialog";
 import { buildLabContext } from "@/lib/ai-context";
 import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
@@ -54,6 +63,10 @@ export function LabEditorClient({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [circuitRules, setCircuitRules] = useState<CircuitRules | null>(
+    lab.circuitRulesJson ?? null,
+  );
   const [configEquipment, setConfigEquipment] =
     useState<PlacedEquipment | null>(null);
 
@@ -258,6 +271,14 @@ export function LabEditorClient({
             <Settings className="mr-2 h-4 w-4" />
             Set Thresholds
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsRulesOpen(true)}
+          >
+            <ListChecks className="mr-2 h-4 w-4" />
+            Validation Rules
+          </Button>
           <Button variant="outline" size="sm">
             <Play className="mr-2 h-4 w-4" />
             Run
@@ -302,6 +323,16 @@ export function LabEditorClient({
         onOpenChange={setIsThresholdsOpen}
         lab={lab}
       />
+
+      {isRulesOpen && (
+        <ValidationRulesDialog
+          open={isRulesOpen}
+          onOpenChange={setIsRulesOpen}
+          labId={lab.id}
+          rules={circuitRules}
+          onSaved={setCircuitRules}
+        />
+      )}
 
       {configEquipment && (
         <EquipmentConfigDialog

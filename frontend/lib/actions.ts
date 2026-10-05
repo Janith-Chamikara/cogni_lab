@@ -14,6 +14,12 @@ import {
   Lab,
   LabEquipment,
   LabStats,
+  CircuitRules,
+  MyLabAttempts,
+  LabAttemptSummary,
+  StudentCircuitPayload,
+  SubmitAttemptResult,
+  ValidationResult,
   Module,
   UpdateLabPayload,
   WireConnection,
@@ -460,5 +466,125 @@ export const updateLabConnections = async (
     return {
       error: getErrorMessage(error, "Failed to update lab connections."),
     };
+  }
+};
+
+export const updateLabRules = async (
+  id: string,
+  rules: CircuitRules | null,
+): Promise<ActionResult<Lab>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to update lab rules." };
+    }
+
+    const response = await api.put<Lab>(
+      `/labs/${id}/rules`,
+      { rules },
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to update lab rules.") };
+  }
+};
+
+export const validateLabCircuit = async (
+  id: string,
+  payload: StudentCircuitPayload,
+): Promise<ActionResult<ValidationResult>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to check your circuit." };
+    }
+
+    const response = await api.post<ValidationResult>(
+      `/labs/${id}/validate`,
+      payload,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to check your circuit.") };
+  }
+};
+
+export const submitLabAttempt = async (
+  id: string,
+  payload: StudentCircuitPayload,
+): Promise<ActionResult<SubmitAttemptResult>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to submit your lab." };
+    }
+
+    const response = await api.post<SubmitAttemptResult>(
+      `/labs/${id}/attempts`,
+      payload,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to submit your lab.") };
+  }
+};
+
+export const getMyLabAttempts = async (
+  id: string,
+): Promise<ActionResult<MyLabAttempts>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view your attempts." };
+    }
+
+    const response = await api.get<MyLabAttempts>(`/labs/${id}/attempts/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load your attempts.") };
+  }
+};
+
+export const getMyAttemptSummary = async (): Promise<
+  ActionResult<LabAttemptSummary[]>
+> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view your progress." };
+    }
+
+    const response = await api.get<LabAttemptSummary[]>("/labs/my-attempts", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load your progress.") };
   }
 };

@@ -665,7 +665,7 @@ export function DashboardClient({
 
                   <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
                     <p className="text-sm font-medium text-muted-foreground">
-                      Total Progress Entries
+                      Student Submissions
                     </p>
                     <p className="mt-3 text-3xl font-semibold">{stats.totalProgress}</p>
                   </div>

@@ -350,18 +350,42 @@ export class LabService {
     return this.findOne(id);
   }
 
-  async delete(id: string) {
+  /**
+   * Delete a lab and, through cascades, its placements, wires, steps and
+   * student attempts. Only the lab's instructor (or an admin) may do this.
+   */
+  async delete(id: string, actor: LabActor) {
     const lab = await this.prisma.labInstance.findUnique({
       where: { id },
+      select: { id: true, instructorId: true },
     });
 
     if (!lab) {
       throw new NotFoundException(`Lab with ID ${id} not found`);
     }
 
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can delete it',
+    );
+
     return this.prisma.labInstance.delete({
       where: { id },
     });
+  }
+
+  private assertCanManage(
+    lab: { instructorId: string | null },
+    actor: LabActor,
+    message: string,
+  ) {
+    if (
+      !actor.isAdmin &&
+      (!actor.isInstructor || lab.instructorId !== actor.userId)
+    ) {
+      throw new ForbiddenException(message);
+    }
   }
 
   async getStats(instructorId: string) {
@@ -459,14 +483,11 @@ export class LabService {
       throw new NotFoundException(`Lab with ID ${id} not found`);
     }
 
-    if (
-      !actor.isAdmin &&
-      (!actor.isInstructor || lab.instructorId !== actor.userId)
-    ) {
-      throw new ForbiddenException(
-        'Only the instructor who owns this lab can change its rules',
-      );
-    }
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can change its rules',
+    );
 
     let circuitRulesJson: ReturnType<typeof normalizeCircuitRules> | null =
       null;

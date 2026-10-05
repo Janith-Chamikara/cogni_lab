@@ -412,7 +412,7 @@ export function DashboardClient({
                             </TableCell>
                             <TableCell className="pr-6">
                               <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                <Link href={`/labs/${lab.id}`}>
+                                <Link href={`/labs/${lab.id}`} data-ai-label={`Open ${lab.labName}`}>
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -472,7 +472,7 @@ export function DashboardClient({
                     </div>
                   ) : (
                     labs.map((lab) => (
-                      <Link key={lab.id} href={`/labs/${lab.id}`}>
+                      <Link key={lab.id} href={`/labs/${lab.id}`} data-ai-label={`Open ${lab.labName}`}>
                         <Card className="group cursor-pointer transition-all hover:shadow-md">
                           <CardHeader className="pb-2">
                             <div className="flex items-start justify-between">

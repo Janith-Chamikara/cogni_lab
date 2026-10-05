@@ -142,7 +142,7 @@ function ChatSession({
     setError(null);
     clearVisualGuidance();
     try {
-      const snapshot = collectGuidanceSnapshot(content);
+      const snapshot = collectGuidanceSnapshot(content, next);
       const token = await getToken();
       if (!token) throw new Error("Sign in again, then we can continue.");
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -232,6 +232,7 @@ function ChatSession({
           content,
           (href) => router.push(href),
           controller.signal,
+          next,
         );
       }
     } catch (failure) {

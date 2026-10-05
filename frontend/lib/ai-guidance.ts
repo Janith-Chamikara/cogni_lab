@@ -1,4 +1,4 @@
-import { getAiPageContext } from "./ai-context";
+import { getAiPageContext, type AiChatMessage } from "./ai-context";
 
 export type ScreenTarget = {
   id: string;
@@ -44,6 +44,95 @@ const requestsNavigation = (message: string) =>
     message,
   );
 
+type NavigationIntent = {
+  request: string;
+  followUp: boolean;
+  selection?: string;
+};
+export const navigationIntent = (
+  messages: AiChatMessage[],
+  depth = 0,
+): NavigationIntent | undefined => {
+  const last = messages.at(-1);
+  if (last?.role !== "user") return undefined;
+  if (requestsNavigation(last.content))
+    return { request: last.content, followUp: false };
+  if (depth >= 3 || messages.at(-2)?.role !== "assistant") return undefined;
+  const confirmation =
+    /^(?:(?:yes|yeah|yep|sure|okay|ok)(?:[, ]+(?:that one|this one|please|go ahead|do it))?|that one|this one|go ahead|do it|please do)[.!?]*$/i.test(
+      last.content.trim(),
+    );
+  if (
+    !confirmation &&
+    (last.content.length > 100 ||
+      /\b(?:no|nah|nope|stop|cancel|don't|do not|where|how|why|what|explain|calculate|help|error|wrong|struggling)\b/i.test(
+        last.content,
+      ))
+  )
+    return undefined;
+  if (
+    !confirmation &&
+    !/\b(?:open|which|choose|select|name|navigate|would you like)\b/i.test(
+      messages.at(-2)!.content,
+    )
+  )
+    return undefined;
+  const previous = navigationIntent(messages.slice(0, -2), depth + 1);
+  return previous
+    ? {
+        request: previous.request,
+        followUp: true,
+        selection: confirmation ? undefined : last.content,
+      }
+    : undefined;
+};
+
+const normalizeLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+
+export const authorizesNavigation = (
+  messages: AiChatMessage[],
+  screen: GuidanceSnapshot["screen"],
+  target: ScreenTarget,
+) => {
+  const intent = navigationIntent(messages);
+  if (!intent) return false;
+  if (!intent.followUp) return true;
+  const matches = (reference: string) =>
+    screen.targets.filter((item) => {
+      const label = normalizeLabel(item.label.replace(/^Open\s+/i, ""));
+      return (
+        item.action !== "show" &&
+        label.length >= 3 &&
+        ` ${normalizeLabel(reference)} `.includes(` ${label} `)
+      );
+    });
+  const requested = matches(intent.request);
+  const referenced = intent.selection
+    ? screen.targets.filter(
+        (item) =>
+          item.action !== "show" &&
+          normalizeLabel(item.label.replace(/^Open\s+/i, "")) ===
+            normalizeLabel(
+              intent.selection!.replace(/^the\s+|\s+please$/gi, ""),
+            ),
+      )
+    : requested.length
+      ? requested
+      : matches(messages.at(-2)!.content);
+  const destinations = new Set(
+    referenced.map(
+      (item) => `${item.action}:${item.href ?? normalizeLabel(item.label)}`,
+    ),
+  );
+  return (
+    destinations.size === 1 && referenced.some((item) => item.id === target.id)
+  );
+};
+
 export const isRenderedTarget = (element: Element) => {
   if (
     !element.isConnected ||
@@ -52,16 +141,23 @@ export const isRenderedTarget = (element: Element) => {
     )
   )
     return false;
-  const style = getComputedStyle(element);
+  for (
+    let current: Element | null = element;
+    current;
+    current = current.parentElement
+  ) {
+    const style = getComputedStyle(current);
+    if (
+      style.display === "none" ||
+      style.visibility === "hidden" ||
+      style.opacity === "0"
+    )
+      return false;
+  }
   const rect = element.getBoundingClientRect();
-  return (
-    style.display !== "none" &&
-    style.visibility !== "hidden" &&
-    style.opacity !== "0" &&
-    (element.matches(".react-flow__edge")
-      ? rect.width > 1 || rect.height > 1
-      : rect.width > 1 && rect.height > 1)
-  );
+  return element.matches(".react-flow__edge")
+    ? rect.width > 1 || rect.height > 1
+    : rect.width > 1 && rect.height > 1;
 };
 
 export const visibleTargetRect = (element: Element) => {
@@ -148,11 +244,16 @@ const controlLabel = (element: Element) =>
 
 export const collectGuidanceSnapshot = (
   message: string,
+  messages: AiChatMessage[] = [{ role: "user", content: message }],
 ): GuidanceSnapshot | undefined => {
   if (
     !/\b(?:where|show|find|locate|point|circle|arrow|draw|highlight|open|click|navigate|visit|launch|error|wrong|issue|struggl|stuck|missing|disconnected|help)\w*\b|can't|cannot|go to|take me/i.test(
       message,
-    )
+    ) &&
+    !/what (?:can|should).{0,30}(?:do|here)|what(?:'s| is) (?:here|available)|(?:available|which) labs/i.test(
+      message,
+    ) &&
+    !navigationIntent(messages)
   )
     return undefined;
   const route = window.location.pathname;
@@ -264,6 +365,7 @@ export const executeGuidance = async (
   message: string,
   navigate: (href: string) => void,
   signal: AbortSignal,
+  messages: AiChatMessage[] = [{ role: "user", content: message }],
 ) => {
   const plan = parsePlan(value);
   const entry = snapshot?.elements.get(plan.targetId);
@@ -281,7 +383,7 @@ export const executeGuidance = async (
     const current = allowedAction(entry.element);
     if (
       plan.purpose !== "navigate" ||
-      !requestsNavigation(message) ||
+      !authorizesNavigation(messages, snapshot.screen, entry.target) ||
       current.action === "show" ||
       current.action !== entry.target.action ||
       current.href !== entry.target.href

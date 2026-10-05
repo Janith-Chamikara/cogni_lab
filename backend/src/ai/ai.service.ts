@@ -12,6 +12,9 @@ import { AI_TOOLS, AiToolsService } from './ai-tools.service';
 import { record, type AiChatRequest } from './ai-request';
 import {
   proposeGuidance,
+  authorizesNavigation,
+  navigationClarification,
+  navigationIntent,
   UI_GUIDANCE_SKILL,
   UI_GUIDANCE_TOOL,
   type GuidancePlan,
@@ -45,6 +48,16 @@ export class AiService {
     const signal = AbortSignal.timeout(60000);
     const prepared = await this.tools.prepare(request.context);
     const screen = request.context.screen;
+    if (
+      screen?.targets.length &&
+      navigationIntent(request.messages)?.followUp &&
+      !screen.targets.some(
+        (target) =>
+          target.action !== 'show' &&
+          authorizesNavigation(request.messages, screen, target),
+      )
+    )
+      return { reply: navigationClarification(screen), toolsUsed: [] };
     const availableTools = screen?.targets.length
       ? [...AI_TOOLS, UI_GUIDANCE_TOOL]
       : AI_TOOLS;
@@ -186,7 +199,7 @@ export class AiService {
               guidance = proposeGuidance(
                 args,
                 screen,
-                request.messages.at(-1)!.content,
+                request.messages,
                 hasWorkspaceIssues,
               );
               result = { proposed: true, reason: guidance.reason };

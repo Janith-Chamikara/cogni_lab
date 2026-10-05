@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Wrench,
   XCircle,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Lab, ExperimentStep } from "@/lib/types";
 import { StudentEquipmentCanvas } from "@/components/student/student-equipment-canvas";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 import { buildLabContext } from "@/lib/ai-context";
 import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
@@ -39,23 +41,26 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
   const router = useRouter();
   const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
   const [completedSteps, setCompletedSteps] = React.useState<Set<number>>(
-    new Set()
+    new Set(),
   );
   const [started, setStarted] = React.useState(false);
   const [setupComplete, setSetupComplete] = React.useState(false);
   const [setupEquipment, setSetupEquipment] = React.useState<Set<string>>(
-    new Set()
+    new Set(),
   );
+  const [isHelpOpen, setIsHelpOpen] = React.useState(false);
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
   const totalSteps = steps.length;
-  const progressPercentage = totalSteps > 0 ? (completedSteps.size / totalSteps) * 100 : 0;
-  
+  const progressPercentage =
+    totalSteps > 0 ? (completedSteps.size / totalSteps) * 100 : 0;
+
   const requiredEquipment = lab.labEquipments || [];
-  const setupPercentage = requiredEquipment.length > 0 
-    ? (setupEquipment.size / requiredEquipment.length) * 100 
-    : 100;
+  const setupPercentage =
+    requiredEquipment.length > 0
+      ? (setupEquipment.size / requiredEquipment.length) * 100
+      : 100;
 
   const labContext = useMemo(
     () =>
@@ -142,7 +147,18 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                   {lab.description}
                 </CardDescription>
               </div>
-              <Badge>{lab.module?.moduleName || "General"}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge>{lab.module?.moduleName || "General"}</Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsHelpOpen(true)}
+                  className="gap-2"
+                >
+                  <Lightbulb className="h-4 w-4" />
+                  Instructor Help
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -178,7 +194,7 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                   </span>
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 {requiredEquipment.length === 0 ? (
                   <Alert>
@@ -193,7 +209,9 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                     return (
                       <button
                         key={equipment.equipmentId}
-                        onClick={() => handleToggleEquipmentSetup(equipment.equipmentId)}
+                        onClick={() =>
+                          handleToggleEquipmentSetup(equipment.equipmentId)
+                        }
                         className="w-full flex items-center gap-3 p-3 rounded-lg border transition-colors hover:bg-muted/50"
                       >
                         <div>
@@ -205,13 +223,16 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                         </div>
                         <div className="flex-1 text-left">
                           <p className="font-medium text-sm">
-                            {equipment.equipment?.equipmentName || "Unknown Equipment"}
+                            {equipment.equipment?.equipmentName ||
+                              "Unknown Equipment"}
                           </p>
-                          {equipment.positionX !== null && equipment.positionY !== null && (
-                            <p className="text-xs text-muted-foreground">
-                              Position: ({equipment.positionX}, {equipment.positionY})
-                            </p>
-                          )}
+                          {equipment.positionX !== null &&
+                            equipment.positionY !== null && (
+                              <p className="text-xs text-muted-foreground">
+                                Position: ({equipment.positionX},{" "}
+                                {equipment.positionY})
+                              </p>
+                            )}
                         </div>
                         <Badge variant={isSetup ? "default" : "outline"}>
                           {isSetup ? "Ready" : "Not Set"}
@@ -245,22 +266,22 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Please ensure all equipment is set before starting the experiment. 
-                Click on equipment items above to mark them as ready.
+                Please ensure all equipment is set before starting the
+                experiment. Click on equipment items above to mark them as
+                ready.
               </AlertDescription>
             </Alert>
 
             <div className="flex gap-3">
-              <Button 
-                onClick={handleStartExperiment} 
+              <Button
+                onClick={handleStartExperiment}
                 className="flex-1"
                 disabled={setupPercentage < 100}
               >
                 <Play className="h-4 w-4 mr-2" />
-                {setupPercentage < 100 
+                {setupPercentage < 100
                   ? `Setup Equipment (${Math.round(setupPercentage)}%)`
-                  : "Start Experiment"
-                }
+                  : "Start Experiment"}
               </Button>
               <Button variant="outline" onClick={handleExitLab}>
                 <ChevronLeft className="h-4 w-4 mr-2" />
@@ -280,11 +301,7 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
         <div className="container mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleExitLab}
-              >
+              <Button variant="ghost" size="sm" onClick={handleExitLab}>
                 <ChevronLeft className="h-4 w-4 mr-2" />
                 Exit Lab
               </Button>
@@ -297,6 +314,15 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsHelpOpen(true)}
+                className="gap-2"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Instructor Help
+              </Button>
               {/* Setup Status Indicator */}
               <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -315,13 +341,17 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               <Progress value={progressPercentage} className="w-32" />
             </div>
           </div>
-          
+
           {/* Equipment Setup Summary */}
           <div className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
             <Wrench className="h-4 w-4" />
-            <span>Equipment Ready: {setupEquipment.size}/{requiredEquipment.length}</span>
+            <span>
+              Equipment Ready: {setupEquipment.size}/{requiredEquipment.length}
+            </span>
             <Separator orientation="vertical" className="h-4" />
-            <span>Steps Completed: {completedSteps.size}/{totalSteps}</span>
+            <span>
+              Steps Completed: {completedSteps.size}/{totalSteps}
+            </span>
           </div>
         </div>
       </div>
@@ -340,44 +370,46 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </Alert>
             ) : (
               steps.map((step: ExperimentStep, index: number) => {
-              const isCompleted = completedSteps.has(index);
-              const isCurrent = index === currentStepIndex;
+                const isCompleted = completedSteps.has(index);
+                const isCurrent = index === currentStepIndex;
 
-              return (
-                <button
-                  key={step.id}
-                  onClick={() => handleGoToStep(index)}
-                  className={`w-full text-left p-3 rounded-lg transition-colors ${
-                    isCurrent
-                      ? "bg-primary text-primary-foreground"
-                      : isCompleted
-                      ? "bg-green-100 dark:bg-green-900/20"
-                      : "bg-background hover:bg-muted"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="mt-0.5">
-                      {isCompleted ? (
-                        <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
-                      ) : (
-                        <Circle className="h-5 w-5" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <Badge
-                          variant={isCurrent ? "secondary" : "outline"}
-                          className="text-xs"
-                        >
-                          Step {index + 1}
-                        </Badge>
+                return (
+                  <button
+                    key={step.id}
+                    onClick={() => handleGoToStep(index)}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                      isCurrent
+                        ? "bg-primary text-primary-foreground"
+                        : isCompleted
+                          ? "bg-green-100 dark:bg-green-900/20"
+                          : "bg-background hover:bg-muted"
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="mt-0.5">
+                        {isCompleted ? (
+                          <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                        ) : (
+                          <Circle className="h-5 w-5" />
+                        )}
                       </div>
-                      <p className="text-sm line-clamp-2">{step.stepDescription}</p>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge
+                            variant={isCurrent ? "secondary" : "outline"}
+                            className="text-xs"
+                          >
+                            Step {index + 1}
+                          </Badge>
+                        </div>
+                        <p className="text-sm line-clamp-2">
+                          {step.stepDescription}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
@@ -403,7 +435,10 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                       <div className="flex items-center gap-2 mb-2">
                         <Badge>Step {currentStepIndex + 1}</Badge>
                         {completedSteps.has(currentStepIndex) && (
-                          <Badge variant="outline" className="bg-green-100 dark:bg-green-900/20">
+                          <Badge
+                            variant="outline"
+                            className="bg-green-100 dark:bg-green-900/20"
+                          >
                             <CheckCircle2 className="h-3 w-3 mr-1" />
                             Completed
                           </Badge>
@@ -418,17 +453,17 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
 
                   {currentStep.minTolerance !== null &&
                     currentStep.maxTolerance !== null && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        <span className="font-medium">Success Criteria:</span>
-                        <p className="mt-2 text-sm">
-                          • Tolerance Range: {currentStep.minTolerance} to{" "}
-                          {currentStep.maxTolerance} {currentStep.unit || ""}
-                        </p>
-                      </AlertDescription>
-                    </Alert>
-                  )}
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <span className="font-medium">Success Criteria:</span>
+                          <p className="mt-2 text-sm">
+                            • Tolerance Range: {currentStep.minTolerance} to{" "}
+                            {currentStep.maxTolerance} {currentStep.unit || ""}
+                          </p>
+                        </AlertDescription>
+                      </Alert>
+                    )}
 
                   <div className="flex items-center justify-between">
                     <Button
@@ -484,6 +519,12 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
           </div>
         </div>
       </div>
+
+      <InstructorLabHelpDialog
+        lab={lab}
+        isOpen={isHelpOpen}
+        onOpenChange={setIsHelpOpen}
+      />
     </div>
   );
 }

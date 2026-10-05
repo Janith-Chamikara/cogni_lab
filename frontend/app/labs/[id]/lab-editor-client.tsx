@@ -2,7 +2,14 @@
 
 import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { ArrowLeft, Play, Save, Trash2, Settings } from "lucide-react";
+import {
+  ArrowLeft,
+  Play,
+  Save,
+  Trash2,
+  Settings,
+  Lightbulb,
+} from "lucide-react";
 import {
   Lab,
   LabEquipment,
@@ -24,6 +31,7 @@ import {
 import { StepsSidebar } from "@/components/lab/steps-sidebar";
 import { ThresholdsDialog } from "@/components/lab/thresholds-dialog";
 import { EquipmentConfigDialog } from "@/components/lab/equipment-config-dialog";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 import { buildLabContext } from "@/lib/ai-context";
 import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
@@ -54,6 +62,7 @@ export function LabEditorClient({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [configEquipment, setConfigEquipment] =
     useState<PlacedEquipment | null>(null);
 
@@ -253,6 +262,14 @@ export function LabEditorClient({
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setIsHelpOpen(true)}
+          >
+            <Lightbulb className="mr-2 h-4 w-4" />
+            Instructor Help
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setIsThresholdsOpen(true)}
           >
             <Settings className="mr-2 h-4 w-4" />
@@ -301,6 +318,12 @@ export function LabEditorClient({
         open={isThresholdsOpen}
         onOpenChange={setIsThresholdsOpen}
         lab={lab}
+      />
+
+      <InstructorLabHelpDialog
+        lab={lab}
+        isOpen={isHelpOpen}
+        onOpenChange={setIsHelpOpen}
       />
 
       {configEquipment && (

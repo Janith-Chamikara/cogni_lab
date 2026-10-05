@@ -14,6 +14,7 @@ import {
   TestTube2,
   XCircle,
   Info,
+  Lightbulb,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,6 +33,7 @@ import type { Lab, ExperimentStep, LabEquipment } from "@/lib/types";
 import { StudentCircuitCanvas } from "@/components/student/student-circuit-canvas";
 import { StudentEquipmentSidebar } from "@/components/student/student-equipment-sidebar";
 import { WIRE_COLORS } from "@/components/lab/circuit-canvas/constants";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -62,6 +64,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
     errors: string[];
   } | null>(null);
   const [showValidation, setShowValidation] = React.useState(false);
+  const [isHelpOpen, setIsHelpOpen] = React.useState(false);
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
@@ -357,6 +360,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                 <ChevronLeft className="h-4 w-4 mr-2" />
                 Go Back
               </Button>
+
               <Separator orientation="vertical" className="h-6" />
               <div>
                 <h1 className="font-semibold text-lg">{lab.labName}</h1>
@@ -374,6 +378,20 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                 <TestTube2 className="h-4 w-4 mr-2" />
                 Check Progress
               </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsHelpOpen(true)}
+              >
+                <Lightbulb className="h-4 w-4 mr-2" />
+                Student Help
+              </Button>
+              <InstructorLabHelpDialog
+                lab={lab}
+                isOpen={isHelpOpen}
+                onOpenChange={setIsHelpOpen}
+              />
+
               <Separator orientation="vertical" className="h-6" />
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">Progress:</span>
@@ -537,7 +555,9 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
 
             {isWireMode && (
               <div className="flex items-center gap-2 border-l pl-4">
-                <span className="text-sm text-muted-foreground">Wire Color:</span>
+                <span className="text-sm text-muted-foreground">
+                  Wire Color:
+                </span>
                 <div className="flex gap-1">
                   {WIRE_COLORS.map((color) => (
                     <button

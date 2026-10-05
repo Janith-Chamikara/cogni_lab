@@ -572,11 +572,19 @@ export function DashboardClient({
 
           <TabsContent value="modules">
             <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Course Modules</CardTitle>
-                <CardDescription>
-                  Organize your labs by course modules
-                </CardDescription>
+              <CardHeader className="gap-4 w-full sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <CardTitle>Course Modules</CardTitle>
+                  <CardDescription>
+                    Organize your labs by course modules
+                  </CardDescription>
+                </div>
+                <Button asChild variant="outline" size="sm" className="gap-2">
+                  <Link href="/modules">
+                    View all modules
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -627,7 +635,7 @@ export function DashboardClient({
                   Track student performance and lab usage
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex min-h-[300px] items-center justify-center">
+              <CardContent className="flex min-h-75 items-center justify-center">
                 <div className="text-center">
                   <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground/30" />
                   <p className="mt-4 text-muted-foreground">

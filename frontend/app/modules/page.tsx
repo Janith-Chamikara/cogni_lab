@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { getModules } from "@/lib/actions";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -59,7 +61,7 @@ export default function ModulesPage() {
 
   const handleModuleUpdated = (updatedModule: Module) => {
     setModules((prev) =>
-      prev.map((m) => (m.id === updatedModule.id ? updatedModule : m))
+      prev.map((m) => (m.id === updatedModule.id ? updatedModule : m)),
     );
   };
 
@@ -82,12 +84,20 @@ export default function ModulesPage() {
   return (
     <div className="min-h-screen bg-background px-6 py-10">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-10">
-        <header className="space-y-2">
-          <h1 className="text-3xl font-semibold">Modules</h1>
-          <p className="max-w-2xl text-sm text-muted-foreground">
-            Create and manage educational modules. Organize labs and equipment
-            assignments for your courses.
-          </p>
+        <header className="space-y-4">
+          <Button asChild variant="outline" size="sm" className="w-fit gap-2">
+            <Link href="/dashboard">
+              <ArrowLeft className="h-4 w-4" />
+              Go back
+            </Link>
+          </Button>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-semibold">Modules</h1>
+            <p className="max-w-2xl text-sm text-muted-foreground">
+              Create and manage educational modules. Organize labs and equipment
+              assignments for your courses.
+            </p>
+          </div>
         </header>
 
         <div className="space-y-6">
@@ -129,9 +139,9 @@ export default function ModulesPage() {
 
           <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {filteredModules.map((module) => (
-              <ModuleCard 
-                key={module.id} 
-                module={module} 
+              <ModuleCard
+                key={module.id}
+                module={module}
                 onEdit={handleModuleEdit}
               />
             ))}

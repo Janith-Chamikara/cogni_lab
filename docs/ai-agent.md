@@ -150,6 +150,29 @@ Provider implementation follows [OpenRouter's tool-calling contract](https://ope
 
 The merged validation feature requires its existing Prisma migration, `20261003111015_circuit_validation`, to be applied by the team's normal migration process before using those services. This AI change adds no schema migration or dependency.
 
+## Local preview build
+
+Use the team's normal environment files and database setup. The frontend requires `NEXT_PUBLIC_API_BASE_URL=http://localhost:3001`; the backend requires its OpenRouter and Clerk credentials. Keep environment files and the local SQLite database untracked.
+
+The normal frontend build currently stops at the unrelated onboarding type error described below. For a local preview without changing that code, run both webpack build phases from `frontend`:
+
+```powershell
+npm run build -- --webpack --experimental-build-mode compile
+npm run build -- --webpack --experimental-build-mode generate-env
+npm run start -- --hostname :: --port 3000
+```
+
+The `generate-env` phase embeds public environment values in browser bundles. Omitting it leaves the AI API URL unresolved in the browser, even when `.env.local` is correct. This preview workflow skips full frontend type checking; it is not a replacement for resolving the team's existing type error before a normal production build.
+
+Build the backend with `npm run build`. In this checkout the generated Prisma sources cause compiled files to appear under `dist/src`; its existing bare `generated/prisma/enums` import also needs the build directory on Node's module path. From `backend`, start it with:
+
+```powershell
+$env:NODE_PATH = (Resolve-Path ./dist).Path
+node ./dist/src/main.js
+```
+
+The frontend runs at `http://localhost:3000` and the backend at `http://localhost:3001`. Apply the validation migration to the local database before opening a lab. If using a copy of the historical tracked database, verify its existing schema and baseline the initial migration before applying the new migration; do not recreate existing tables.
+
 ## Conversation lifecycle and privacy
 
 History is stored in browser `sessionStorage`, keyed by signed-in user and route. It survives reloads within the same tab. Lab changes create separate conversations; returning to a lab restores that lab's session. **New chat** clears the active conversation. A user change remounts the session, preventing the previous user's history from appearing.

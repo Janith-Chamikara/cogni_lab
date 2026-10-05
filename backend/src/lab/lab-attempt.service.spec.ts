@@ -299,3 +299,50 @@ describe('LabService.updateRules', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+describe('LabService.delete', () => {
+  const withDelete = () => {
+    const { prisma, mocks } = makePrisma(makeLab(null));
+    const deleteLab = jest.fn().mockResolvedValue({ id: 'lab-1' });
+    (prisma.labInstance as unknown as { delete: jest.Mock }).delete = deleteLab;
+    return { service: new LabService(prisma), deleteLab, mocks };
+  };
+
+  it('lets the owning instructor or an admin delete the lab', async () => {
+    const { service, deleteLab } = withDelete();
+
+    await service.delete('lab-1', {
+      userId: 'instructor-1',
+      isInstructor: true,
+      isAdmin: false,
+    });
+    await service.delete('lab-1', {
+      userId: 'admin-1',
+      isInstructor: true,
+      isAdmin: true,
+    });
+
+    expect(deleteLab).toHaveBeenCalledTimes(2);
+    expect(deleteLab).toHaveBeenCalledWith({ where: { id: 'lab-1' } });
+  });
+
+  it('forbids students and instructors who do not own the lab', async () => {
+    const { service, deleteLab } = withDelete();
+
+    await expect(
+      service.delete('lab-1', {
+        userId: 'instructor-1',
+        isInstructor: false,
+        isAdmin: false,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.delete('lab-1', {
+        userId: 'other',
+        isInstructor: true,
+        isAdmin: false,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(deleteLab).not.toHaveBeenCalled();
+  });
+});

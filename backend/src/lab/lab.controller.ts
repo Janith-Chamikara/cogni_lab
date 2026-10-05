@@ -178,7 +178,8 @@ export class LabController {
   }
 
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    return this.labService.delete(id);
+  async delete(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const actor = await this.getActor(req.user);
+    return this.labService.delete(id, actor);
   }
 }

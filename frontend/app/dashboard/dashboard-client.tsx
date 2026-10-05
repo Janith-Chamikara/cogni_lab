@@ -19,8 +19,10 @@ import {
   Clock,
   CheckCircle2,
   Wrench,
+  Trash2,
 } from "lucide-react";
 import { Lab, LabEquipment, LabStats, Module } from "@/lib/types";
+import { deleteLab, getLabStats } from "@/lib/actions";
 import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
 import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CreateLabDialog } from "@/components/lab/create-lab-dialog";
 
 type DashboardClientProps = {
@@ -95,6 +105,9 @@ export function DashboardClient({
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false);
+  const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filteredLabs = labs.filter(
     (lab) =>
@@ -106,6 +119,34 @@ export function DashboardClient({
     setLabs([newLab, ...labs]);
     setStats({ ...stats, totalLabs: stats.totalLabs + 1 });
     setIsCreateOpen(false);
+  };
+
+  const openDeleteDialog = (lab: Lab) => {
+    setDeleteError(null);
+    setLabToDelete(lab);
+  };
+
+  const handleDeleteLab = async () => {
+    if (!labToDelete) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    const result = await deleteLab(labToDelete.id);
+
+    if (result.error) {
+      setDeleteError(result.error);
+      setIsDeleting(false);
+      return;
+    }
+
+    setLabs((prev) => prev.filter((lab) => lab.id !== labToDelete.id));
+    // The lab's submissions are deleted with it, so reload the stats.
+    const statsResult = await getLabStats();
+    setStats(
+      statsResult.data ?? { ...stats, totalLabs: stats.totalLabs - 1 },
+    );
+    setIsDeleting(false);
+    setLabToDelete(null);
   };
 
   const handleEquipmentCreated = (equipment: LabEquipment) => {
@@ -421,7 +462,7 @@ export function DashboardClient({
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </Link>
-                                <DropdownMenu>
+                                <DropdownMenu modal={false}>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
@@ -436,7 +477,11 @@ export function DashboardClient({
                                     <DropdownMenuItem>
                                       Duplicate
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive">
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onSelect={() => openDeleteDialog(lab)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
                                       Delete
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -773,6 +818,44 @@ export function DashboardClient({
         onOpenChange={setIsCreateEquipmentOpen}
         onCreated={handleEquipmentCreated}
       />
+
+      {/* Delete Lab Confirmation */}
+      <Dialog
+        open={!!labToDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setLabToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete laboratory?</DialogTitle>
+            <DialogDescription>
+              &quot;{labToDelete?.labName}&quot; will be permanently deleted,
+              together with its equipment, wiring, steps and all student
+              submissions. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLabToDelete(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteLab}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

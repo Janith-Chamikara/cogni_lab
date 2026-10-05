@@ -59,6 +59,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
+import { buildLabContext } from "@/lib/ai-context";
+import { useAiPageContext } from "@/hooks/use-ai-page-context";
 
 const wireKey = (conn: WireConnection) =>
   `${conn.sourceEquipmentId}.${conn.sourceHandle}|${conn.targetEquipmentId}.${conn.targetHandle}`;
@@ -125,6 +127,23 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
     () => lab.labEquipments || [],
     [lab.labEquipments],
   );
+
+  useAiPageContext({
+    pageType: "student-lab",
+    lab: buildLabContext(lab),
+    student: {
+      currentStepIndex,
+      totalSteps,
+      completedStepIds: [...completedSteps]
+        .map((index) => steps[index]?.id)
+        .filter((id): id is string => Boolean(id)),
+    },
+    workspace: {
+      components: placedEquipments,
+      connections: wireConnections,
+      completedStepIds: [],
+    },
+  });
 
   // The sidebar drags a lab placement id, so each student component knows
   // which required component (R1, R2, ...) it is.

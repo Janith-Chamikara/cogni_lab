@@ -1,22 +1,13 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { AiService } from './ai.service';
-
-type ChatMessage = {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-};
-
-type AiChatRequest = {
-  messages: ChatMessage[];
-};
+import { parseChatRequest } from './ai-request';
 
 @Controller('ai')
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 
   @Post('chat')
-  async chat(@Body() body: AiChatRequest) {
-    const reply = await this.aiService.chat(body.messages || []);
-    return { reply };
+  async chat(@Body() body: unknown) {
+    return this.aiService.chat(parseChatRequest(body));
   }
 }

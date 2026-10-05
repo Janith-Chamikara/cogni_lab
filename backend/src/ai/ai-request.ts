@@ -1,5 +1,10 @@
 import { BadRequestException } from '@nestjs/common';
 import type { StudentCircuitDto } from '../lab/dto/lab.dto';
+import {
+  isGuidanceRoute,
+  type ScreenContext,
+  type ScreenTarget,
+} from './ai-guidance';
 
 export type ChatMessage = { role: 'user' | 'assistant'; content: string };
 export type AiContext = {
@@ -10,6 +15,7 @@ export type AiContext = {
   currentStepIndex: number;
   completedStepIds: string[];
   workspace?: StudentCircuitDto;
+  screen?: ScreenContext;
 };
 export type AiChatRequest = { messages: ChatMessage[]; context: AiContext };
 
@@ -70,6 +76,38 @@ export const parseChatRequest = (body: unknown): AiChatRequest => {
     currentStepIndex: currentStepIndex as number,
     completedStepIds: [...new Set(completedStepIds)],
   };
+  if (context.screen !== undefined) {
+    const screen = record(context.screen);
+    if (JSON.stringify(screen).length > 10000)
+      throw new BadRequestException('Screen inventory is too large.');
+    const targets = list(screen.targets, 60).map((value): ScreenTarget => {
+      const item = record(value);
+      if (
+        !['control', 'component', 'wire', 'terminal', 'section'].includes(
+          String(item.kind),
+        ) ||
+        !['show', 'navigate', 'help', 'tab'].includes(String(item.action)) ||
+        (item.kind !== 'control' && item.action !== 'show')
+      )
+        throw new BadRequestException('Invalid screen target.');
+      const href = text(item.href, 250);
+      if (item.action === 'navigate' && (!href || !isGuidanceRoute(href)))
+        throw new BadRequestException(
+          'Only lab and learning navigation is supported.',
+        );
+      return {
+        id: text(item.id, 20, true)!,
+        label: text(item.label, 100, true)!,
+        kind: item.kind as ScreenTarget['kind'],
+        action: item.action as ScreenTarget['action'],
+        href,
+        componentId: text(item.componentId, 128),
+      };
+    });
+    if (new Set(targets.map((target) => target.id)).size !== targets.length)
+      throw new BadRequestException('Screen target ids must be unique.');
+    parsed.screen = { targets };
+  }
   if (context.workspace !== undefined) {
     if (!parsed.labId)
       throw new BadRequestException('A workspace needs a lab id.');

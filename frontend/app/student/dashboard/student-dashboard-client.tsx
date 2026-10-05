@@ -298,6 +298,9 @@ export function StudentDashboardClient({
                           <Button
                             className="w-full"
                             onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
                           >
                             Start Experiment
                           </Button>
@@ -398,6 +401,9 @@ export function StudentDashboardClient({
                           <Button
                             className="w-full"
                             onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
                           >
                             Start Experiment
                           </Button>

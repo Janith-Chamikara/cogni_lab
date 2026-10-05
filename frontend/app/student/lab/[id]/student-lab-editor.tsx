@@ -510,6 +510,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                 variant="outline"
                 size="sm"
                 onClick={() => setShowHelpDialog(true)}
+                data-ai-action="help"
               >
                 <Lightbulb className="h-4 w-4 mr-2" />
                 Get Help

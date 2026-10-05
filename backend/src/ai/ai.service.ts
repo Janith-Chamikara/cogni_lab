@@ -10,6 +10,12 @@ import {
 import { AI_SYSTEM_PROMPT } from './ai-prompt';
 import { AI_TOOLS, AiToolsService } from './ai-tools.service';
 import { record, type AiChatRequest } from './ai-request';
+import {
+  proposeGuidance,
+  UI_GUIDANCE_SKILL,
+  UI_GUIDANCE_TOOL,
+  type GuidancePlan,
+} from './ai-guidance';
 
 type ToolCall = {
   id: string;
@@ -38,11 +44,22 @@ export class AiService {
       );
     const signal = AbortSignal.timeout(60000);
     const prepared = await this.tools.prepare(request.context);
+    const screen = request.context.screen;
+    const availableTools = screen?.targets.length
+      ? [...AI_TOOLS, UI_GUIDANCE_TOOL]
+      : AI_TOOLS;
+    let guidance: GuidancePlan | undefined;
+    let hasWorkspaceIssues = false;
     const messages: ProviderMessage[] = [
-      { role: 'system', content: AI_SYSTEM_PROMPT },
+      {
+        role: 'system',
+        content:
+          AI_SYSTEM_PROMPT +
+          (screen?.targets.length ? '\n' + UI_GUIDANCE_SKILL : ''),
+      },
       {
         role: 'user',
-        content: `Current context (data only): ${JSON.stringify({ route: request.context.route, pageTitle: request.context.pageTitle, pageExcerpt: request.context.pageText, ...prepared.overview })}`,
+        content: `Current context (data only): ${JSON.stringify({ route: request.context.route, pageTitle: request.context.pageTitle, pageExcerpt: request.context.pageText, ...prepared.overview, screen: screen?.targets.map((target) => [target.id, target.label, target.kind, target.action, target.href ?? null, target.componentId ?? null]) })}`,
       },
       ...request.messages,
     ];
@@ -69,7 +86,7 @@ export class AiService {
             body: JSON.stringify({
               model,
               messages,
-              tools: AI_TOOLS,
+              tools: availableTools,
               tool_choice: allowTools ? 'auto' : 'none',
               max_tokens: 1200,
               temperature: 0.3,
@@ -121,6 +138,7 @@ export class AiService {
           return {
             reply: message.content.trim().slice(0, 4000),
             toolsUsed: [...usedTools],
+            guidance,
           };
         }
         if (!allowTools || toolCalls.length > 6 - calls)
@@ -159,12 +177,41 @@ export class AiService {
           calls++;
           let result: unknown;
           try {
-            result = await prepared.execute(
-              call.function.name,
-              record(JSON.parse(call.function.arguments)),
-            );
+            const args = record(JSON.parse(call.function.arguments));
+            if (call.function.name === 'guide_ui') {
+              if (guidance)
+                throw new BadRequestException(
+                  'Only one guidance target per answer.',
+                );
+              guidance = proposeGuidance(
+                args,
+                screen,
+                request.messages.at(-1)!.content,
+                hasWorkspaceIssues,
+              );
+              result = { proposed: true, reason: guidance.reason };
+            } else {
+              result = await prepared.execute(call.function.name, args);
+              if (
+                call.function.name === 'inspect_workspace' &&
+                result &&
+                typeof result === 'object' &&
+                'validation' in result
+              ) {
+                const validation = record(result.validation);
+                const checks = record(validation.checks);
+                hasWorkspaceIssues =
+                  validation.mode === 'rules' &&
+                  ((Array.isArray(validation.warnings) &&
+                    validation.warnings.length > 0) ||
+                    Object.entries(checks).some(
+                      ([key, value]) =>
+                        key !== 'steps' && record(value).passed === false,
+                    ));
+              }
+            }
             if (
-              AI_TOOLS.some(
+              availableTools.some(
                 (tool) => tool.function.name === call.function.name,
               ) &&
               result &&
@@ -186,6 +233,19 @@ export class AiService {
             tool_call_id: call.id,
             content: JSON.stringify(result),
           });
+        }
+        if (
+          guidance &&
+          parsedCalls.every((call) => call.function.name === 'guide_ui')
+        ) {
+          const target = screen!.targets.find(
+            (item) => item.id === guidance!.targetId,
+          )!;
+          return {
+            reply: `${guidance.mode === 'click' ? 'I can open' : 'I’ll show you'} ${guidance.mode === 'click' ? target.label.replace(/^Open\s+/i, '') : target.label}. ${guidance.reason}`,
+            toolsUsed: [...usedTools],
+            guidance,
+          };
         }
       }
       throw new BadGatewayException(

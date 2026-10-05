@@ -4,9 +4,9 @@
 
 The assistant supports students with experiment steps, equipment setup, circuit troubleshooting, theory, calculations and interpretation of readings. It uses the existing chat interface, NestJS backend and OpenRouter integration. There is no separate agent framework, vector database or persistent conversation database.
 
-The agent reads lab information and checks the current student workspace. It cannot place equipment, change wires or settings, mark steps complete, submit attempts, save grades or run an electrical simulation. Students remain in control of those actions.
+The agent reads lab information and checks the current student workspace. Its visual guidance skill can point to controls, circle equipment or wires, draw an arrow and open learning views when explicitly requested. It cannot place equipment, change wires or settings, mark steps complete, submit attempts, save grades or run an electrical simulation. Students remain in control of those actions. The tutoring policy calls for progressive hints rather than a complete worked experiment or answer sheet.
 
-The instructor reference guide from `dev_hansadee` remains available through **Get Help**. The circuit validation and attempt services from `feature/multi-topology-circuit-validation` supply the same checks used by **Check Progress**. AI implementation changes are confined to `backend/src/ai`, the AI widget/context/hook, this documentation and the context integration in the active student editor. Upstream changes and tests remain owned by their original features.
+The instructor reference guide from `dev_hansadee` remains available through **Get Help**. The circuit validation and attempt services from `feature/multi-topology-circuit-validation` supply the same checks used by **Check Progress**. AI implementation changes are confined to `backend/src/ai`, the AI widget/context/overlay, this documentation and minimal context or target metadata in the student dashboard, editor and instructor help dialog. Upstream changes and tests remain owned by their original features.
 
 ## Architecture
 
@@ -21,12 +21,19 @@ flowchart LR
     Agent --> Guide[Saved lab guide]
     Agent --> Checks[Existing progress validator]
     Agent --> Calculator[Deterministic calculations]
+    Chat --> Inventory[Rendered screen targets]
+    Inventory --> API
+    Agent --> Proposal[One guidance proposal]
+    Proposal --> Browser[Browser action checks]
+    Browser --> Overlay[Blue cursor and SVG annotations]
 ```
 
 | Component | Responsibility |
 | --- | --- |
 | `frontend/components/ai-chat-widget.tsx` | Conversation UI, authentication token, cancellation, retry, session history and successful-check indicators |
 | `frontend/lib/ai-context.ts` | Route-isolated page context, page excerpt cleanup and bounded request construction |
+| `frontend/lib/ai-guidance.ts` | Collect rendered targets, retain local element references and validate guidance before execution |
+| `frontend/components/ai-guidance-overlay.tsx` | Independent blue cursor, target tracking, circle/arrow drawing, dismissal and cancellation |
 | `frontend/hooks/use-ai-page-context.ts` | Publish page context and remove it when its owner unmounts |
 | `frontend/app/student/lab/[id]/student-lab-editor.tsx` | Publish placed component identities, live wires, current step and completed step ids |
 | `backend/src/ai/ai-request.ts` | Validate incoming messages and workspace structure at runtime |
@@ -34,6 +41,7 @@ flowchart LR
 | `backend/src/ai/ai.service.ts` | Provider requests, tool loop, deadlines, limits and error mapping |
 | `backend/src/ai/ai-tools.service.ts` | Load saved lab data, validate equipment membership and dispatch read-only tools |
 | `backend/src/ai/ai-calculations.ts` | Supported formulas and numerical input checks |
+| `backend/src/ai/ai-guidance.ts` | Visual skill instructions, tool schema, safe route list and proposal checks |
 
 The global Clerk authentication guard protects the AI endpoint. The AI module imports the existing lab module and provides the existing read-only attempt service with Prisma. Lab reads follow the application's current lab-access policy; this change does not introduce a new permission system.
 
@@ -48,6 +56,20 @@ Claims about circuit correctness should use `inspect_workspace`. Rule-based resu
 Measurement interpretation uses student-provided readings and the selected step's tolerances, falling back to lab tolerances when appropriate. The model must ask for missing values or incompatible units. Supported calculations are performed by code, while explanations, unit conversion and selection of appropriate inputs remain model responsibilities.
 
 Instructor pages continue to provide their lab identity. The tools consult the saved instructor design; unsaved instructor edits are not available to the tools. General pages support learning questions and a short page excerpt without claiming a live circuit is available.
+
+## Visual guidance skill
+
+Examples: **Where is Get Help?**, **Open Ohm's Law lab**, **Draw an arrow to Wire Mode**, or **Circle the issue in my circuit**. Location questions highlight a target and leave the action to the student. The assistant can open a listed lab, dashboard, module/equipment view, navigation tab or instructor help guide only after an explicit navigation request. It opens a lab view through the app router; it does not invoke the experiment button's business handler. Ambiguous destination names require clarification.
+
+The browser collects a bounded inventory of rendered controls, canvas components, terminals when relevant, wires and headings. Each request creates fresh target ids and retains their element references locally. The model receives labels, kinds and allowed actions, with component identities for troubleshooting. It receives no screenshots, screen coordinates, arbitrary selectors or executable browser code. The inventory is sent only for guidance, navigation or troubleshooting requests and replaces the redundant page excerpt. Conversation history is reduced to the latest 12 messages. A successful guidance-only tool turn returns immediately without another inference just to write a response.
+
+`guide_ui` proposes one target with a mode, purpose and short explanation. The server rejects unsupported targets, experiment clicks, unrequested navigation and error annotations without a prior workspace inspection reporting a failed circuit rule check or warning. Incomplete steps and legacy count checks cannot authorize a circuit-error annotation. Issue annotations must target a component, terminal or wire. The skill instructs the model to match that target to actual validator evidence and describe one issue at a time. A valid proposal is not proof of a correct diagnosis; students should compare the explanation with the lab guide and validator. When no precise issue is established, the assistant can highlight a place to inspect with purpose `locate` and explain the uncertainty.
+
+Before displaying a proposal, the browser checks the current route, unchanged workspace, connected/rendered element and request cancellation. Before clicking, it checks the target's current capability, label, destination and visibility again. Navigation uses an allowlisted internal route; help clicks are confined to the student editor's marked help button; tab activation is confined to dashboard or instructor-reference navigation. Other controls are highlight-only. Changing the screen or workspace prevents a stale action from being executed.
+
+The overlay uses a glowing blue SVG cursor and non-interactive SVG annotations. It never moves the student's real cursor, drags components or focuses a lab control. It follows target bounds during scrolling and canvas movement, and scrolls an offscreen target into view when possible. Circles use an animated uneven stroke; arrows point at the target. Guidance fades after eight seconds. Requested clicks wait one second while the target is shown. **Escape**, **Dismiss**, **Stop**, **New chat**, a new guidance request, route changes or cancellation remove the overlay and prevent a pending click. The chat closes if it would obscure the target. Reduced-motion preferences disable cursor transitions and drawing animation.
+
+There is no arbitrary freehand drawing or autonomous sequence across multiple pages. If an element is missing, hidden, inside an unopened tab, or outside the bounded inventory, the assistant must ask the student to open the relevant view or give a manual next step. It cannot automatically find an offscreen canvas component by changing canvas zoom or repairing its wiring.
 
 ## API contract
 
@@ -90,6 +112,25 @@ Successful responses preserve the existing `reply` property and add check metada
 
 `toolsUsed` contains known tools that returned available results. Failed or unavailable checks do not produce a successful-check indicator. Responses use Nest's existing POST success status, 201.
 
+Visual requests may include `context.screen.targets`, an array of `{ id, label, kind, action, href?, componentId? }`. Kinds are `control`, `component`, `wire`, `terminal` and `section`. Allowed actions are `show`, `navigate`, `help` and `tab`; non-controls allow only `show`. Navigation targets require an allowlisted internal `href`. Client capabilities are rechecked against actual DOM elements in the browser before execution.
+
+A guidance response additionally includes:
+
+```json
+{
+  "reply": "I'll show you Get Help. This opens the instructor reference guide.",
+  "toolsUsed": ["guide_ui"],
+  "guidance": {
+    "targetId": "s1_0",
+    "mode": "point",
+    "purpose": "locate",
+    "reason": "This opens the instructor reference guide."
+  }
+}
+```
+
+Modes are `point`, `circle`, `arrow` and `click`; purposes are `locate`, `issue` and `navigate`. A click requires `navigate`. The reason is limited to 180 characters. Proposals are not stored in session history or replayed after reload. The server does not receive an action-success acknowledgement and does not claim completed browser actions.
+
 | Status | Meaning |
 | --- | --- |
 | 400 | Invalid messages, context, wire references or equipment membership |
@@ -109,6 +150,7 @@ Provider response bodies, credentials and conversation content are not included 
 | `inspect_lab` | No arguments. Saved procedures, labels, selected configuration fields, tolerance ranges, reference wires and rules |
 | `inspect_workspace` | No arguments. Actual placed components, terminals, valid completed-step count and the existing progress-validator result. Repeated checks within one request reuse the result |
 | `calculate` | `operation` plus the fields listed below. Returns formulas, units, assumptions or comparison provenance |
+| `guide_ui` | Available only with a screen inventory. `targetId`, `mode`, `purpose`, `reason`; proposes one annotation or explicitly requested safe navigation action |
 
 Supported calculation operations:
 
@@ -122,9 +164,11 @@ Resistances must be positive; numeric inputs and results must be finite. Resista
 | Boundary | Limit |
 | --- | --- |
 | Incoming messages | 24; 4,000 characters each; 24,000 characters total |
-| Browser history sent | Latest 20 messages, trimmed to 20,000 characters |
+| Browser history sent | Latest 12 messages, trimmed to 12,000 characters |
 | Displayed/stored history | Latest 40 messages per user and route |
 | Page excerpt | 1,800 characters; excludes chat, scripts, styles, navigation and form inputs |
+| Screen inventory | Up to 60 unique targets; labels 100 characters; browser payload below 9,500 characters; server accepts up to 10,000 |
+| Visual guidance | One target per answer; 1-second click dwell; 8-second annotation lifetime |
 | Workspace | 100 uniquely identified components and 200 wires referencing placed components |
 | Completed step ids | 100; deduplicated and checked against saved lab steps |
 | Guide data | Up to 100 steps, 100 equipment placements and 200 reference wires; descriptions/procedures are bounded |
@@ -132,7 +176,7 @@ Resistances must be positive; numeric inputs and results must be finite. Resista
 | Provider output | 1,200 tokens per turn; reply capped at 4,000 characters |
 | Deadline | Shared 60-second provider/tool-loop deadline; browser request times out at 70 seconds |
 
-Cancellation stops the browser request. Any backend work already in progress remains read-only and subject to its deadline. No automatic submission or grade change occurs.
+Cancellation stops the browser request and pending guidance click. Backend lab tools remain read-only and subject to their deadline. No automatic submission or grade change occurs.
 
 ## Configuration
 
@@ -191,9 +235,13 @@ Validated on 2026-10-05:
 - Temporary backend checks for request rejection, equipment membership, real read-only lab/validator integration, formulas, tolerance boundaries, provider tool loops, failure recovery, limits, fallback, module wiring and HTTP validation.
 - Temporary DOM interaction checks for live context, retry without duplicating a question, stop/retry, per-lab history, new chat, readable steps, text-only rendering and history limits.
 - A live synthetic OpenRouter calculation check. The configured model returned 404; the free-router retry used `calculate` and returned 0.005 A / 5 mA for 5 V across 1,000 Ω.
+- Ten temporary guidance checks covering safe action boundaries, ambiguous destinations, rejected/oversized inventories, single-inference guidance, inspected error evidence, rejected legacy/step-only diagnoses, hidden controls, canvas terminals/straight wires, changed routes/workspaces/labels/destinations, post-animation rechecks and cancellation. The React overlay check verified blue SVG drawing, moving target bounds, Escape cancellation and the delayed navigation action.
+- Live synthetic provider checks returned a point proposal for **Where is Get Help?** and an allowed navigation proposal for **Open Ohm Lab**. The configured model again returned 404; the existing free-router fallback handled both requests.
 
 The added validation scripts and fixtures were removed after use and are not part of the commits. Existing upstream tests were preserved.
 
 The full frontend type check remains blocked by a pre-existing Zod 4 `required_error` incompatibility in `frontend/lib/schemas/onboarding.ts`. That file is outside the AI scope and was not changed. A browser connection was unavailable, so visual layout and a real Clerk-authenticated end-to-end lab session were not verified. The DOM checks use fixture authentication and provider responses; they do not replace that manual acceptance pass.
 
 Recommended manual acceptance after the normal migration and app startup: open a student lab, place and wire equipment, ask for a hint and a setup check, request a calculation and a reading comparison, open **Get Help**, then switch labs and return. Confirm the agent describes current work, separates reference wiring from actual wiring and leaves submission decisions to the student.
+
+For visual guidance, ask where **Get Help** is, request an arrow to **Wire Mode**, ask to open a named visible lab and cancel a navigation proposal with **Escape**. Ask to circle a validator-supported connection issue, then ask the assistant to fix the wiring or click **Submit**. It should explain or highlight while leaving those experiment actions to the student. Verify that scrolling, canvas movement and opening the chat do not let the overlay obscure or intercept normal lab interactions.

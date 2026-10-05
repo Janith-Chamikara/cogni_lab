@@ -5,6 +5,7 @@ import type {
   StudentCircuitPayload,
   WireConnection,
 } from "@/lib/types";
+import type { GuidanceSnapshot } from "./ai-guidance";
 
 export type AiPageContext = {
   route?: string;
@@ -94,11 +95,12 @@ export const getPageSnapshot = () => {
 export const buildChatRequest = (
   messages: AiChatMessage[],
   context = getAiPageContext(),
+  screen?: GuidanceSnapshot["screen"],
 ) => {
-  const history = messages.slice(-20);
+  const history = messages.slice(-12);
   while (
     history.length > 1 &&
-    history.reduce((size, message) => size + message.content.length, 0) > 20000
+    history.reduce((size, message) => size + message.content.length, 0) > 12000
   )
     history.shift();
   while (history.length > 1 && history[0].role === "assistant") history.shift();
@@ -110,7 +112,8 @@ export const buildChatRequest = (
     context: {
       route: context.route,
       pageTitle: document.title.trim().slice(0, 200) || undefined,
-      pageText: getPageSnapshot(),
+      pageText: screen?.targets.length ? undefined : getPageSnapshot(),
+      screen,
       labId: context.lab?.id,
       currentStepIndex: context.student?.currentStepIndex ?? 0,
       completedStepIds: context.student?.completedStepIds ?? [],

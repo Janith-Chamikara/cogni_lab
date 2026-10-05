@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { useAuth } from "@clerk/nextjs";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { RotateCcw, Send, Square, X } from "lucide-react";
 import {
   buildChatRequest,
@@ -11,17 +11,24 @@ import {
   inferPageType,
   type AiChatMessage,
 } from "@/lib/ai-context";
+import {
+  clearVisualGuidance,
+  collectGuidanceSnapshot,
+  executeGuidance,
+} from "@/lib/ai-guidance";
+import { AiGuidanceOverlay } from "./ai-guidance-overlay";
 
 type Message = AiChatMessage & { toolsUsed?: string[] };
 const welcome: Message = {
   role: "assistant",
   content:
-    "Hi! I can explain lab steps, help troubleshoot your circuit, and work through calculations with you.",
+    "Hi! I can explain lab steps, help troubleshoot your circuit, and show you where things are with a blue pointer. You stay in control of your experiment.",
 };
 const evidenceLabels: Record<string, string> = {
   inspect_lab: "Lab guide consulted",
   inspect_workspace: "Workspace checked",
   calculate: "Calculation checked",
+  guide_ui: "Visual guidance",
 };
 
 const readHistory = (key: string): Message[] => {
@@ -63,6 +70,7 @@ function ChatSession({
   pathname: string;
 }) {
   const { getToken } = useAuth();
+  const router = useRouter();
   const storageKey = `cogni-ai:${userId}:${pathname}`;
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -131,7 +139,9 @@ function ChatSession({
     if (!prompt) setInput("");
     setSending(true);
     setError(null);
+    clearVisualGuidance();
     try {
+      const snapshot = collectGuidanceSnapshot(content);
       const token = await getToken();
       if (!token) throw new Error("Please sign in again to continue chatting.");
       const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -150,7 +160,9 @@ function ChatSession({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify(buildChatRequest(next)),
+        body: JSON.stringify(
+          buildChatRequest(next, getAiPageContext(), snapshot?.screen),
+        ),
       });
       if (!response.ok) {
         const errors: Record<number, string> = {
@@ -169,7 +181,11 @@ function ChatSession({
         );
       }
       const data: unknown = await response.json();
-      const result = data as { reply?: unknown; toolsUsed?: unknown } | null;
+      const result = data as {
+        reply?: unknown;
+        toolsUsed?: unknown;
+        guidance?: unknown;
+      } | null;
       if (!result || typeof result.reply !== "string" || !result.reply.trim())
         throw new Error(
           "The assistant returned an empty answer. Please retry.",
@@ -188,6 +204,37 @@ function ChatSession({
           { role: "assistant" as const, content: reply, toolsUsed },
         ].slice(-40),
       );
+      if (result.guidance) {
+        const panel = document
+          .getElementById("ai-chat-panel")
+          ?.getBoundingClientRect();
+        const targetId =
+          typeof result.guidance === "object" &&
+          result.guidance !== null &&
+          "targetId" in result.guidance
+            ? result.guidance.targetId
+            : undefined;
+        const target =
+          typeof targetId === "string"
+            ? snapshot?.elements.get(targetId)?.element.getBoundingClientRect()
+            : undefined;
+        if (
+          panel &&
+          target &&
+          target.left < panel.right &&
+          target.right > panel.left &&
+          target.top < panel.bottom &&
+          target.bottom > panel.top
+        )
+          setOpen(false);
+        await executeGuidance(
+          result.guidance,
+          snapshot,
+          content,
+          (href) => router.push(href),
+          controller.signal,
+        );
+      }
     } catch (failure) {
       if (requestRef.current !== controller) return;
       setError(
@@ -210,6 +257,7 @@ function ChatSession({
   };
 
   const newChat = () => {
+    clearVisualGuidance();
     requestRef.current?.abort();
     requestRef.current = null;
     setSending(false);
@@ -429,10 +477,13 @@ export function AiChatWidget() {
   )
     return null;
   return (
-    <ChatSession
-      key={`${userId}:${pathname}`}
-      userId={userId}
-      pathname={pathname}
-    />
+    <>
+      <AiGuidanceOverlay key={userId} route={pathname} />
+      <ChatSession
+        key={`${userId}:${pathname}`}
+        userId={userId}
+        pathname={pathname}
+      />
+    </>
   );
 }

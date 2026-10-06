@@ -25,12 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import type {
-  Lab,
-  Module,
-  LabEquipment,
-  LabAttemptSummary,
-} from "@/lib/types";
+import type { Lab, Module, LabEquipment, LabAttemptSummary } from "@/lib/types";
 
 interface StudentDashboardClientProps {
   initialLabs: Lab[];
@@ -46,12 +41,12 @@ function LabProgressBadge({ summary }: { summary?: LabAttemptSummary }) {
   return summary.passed ? (
     <Badge className="gap-1 bg-green-500">
       <CheckCircle2 className="h-3 w-3" />
-      Completed · {summary.bestScore}%
+      Validated
     </Badge>
   ) : (
     <Badge variant="secondary" className="gap-1">
       <Clock className="h-3 w-3" />
-      Best: {summary.bestScore}%
+      Not validated yet
     </Badge>
   );
 }
@@ -113,7 +108,7 @@ export function StudentDashboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
-      <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
+      <div className="container mx-auto max-w-[96rem] space-y-8 px-6 py-8">
         {/* Header Section (matches main dashboard) */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>

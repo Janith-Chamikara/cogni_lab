@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { updateLabRules } from "@/lib/actions";
-import { AllowedTopology, CircuitRules } from "@/lib/types";
+import { useEffect, useState } from "react";
+import { Bug } from "lucide-react";
+import { getLabReference, updateLabRules } from "@/lib/actions";
+import { AllowedTopology, CircuitRules, ReferenceAnalysis } from "@/lib/types";
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CircuitDebugView } from "@/components/lab/circuit-debug/circuit-debug-view";
 
 const DEFAULT_RULES: CircuitRules = {
   allowedTopologies: ["series", "parallel"],
@@ -33,6 +35,7 @@ const DEFAULT_RULES: CircuitRules = {
   valueTolerancePercent: 5,
   equivalentResistance: null,
   requireStepsCompleted: true,
+  compareToReference: true,
 };
 
 const TOPOLOGY_OPTIONS: { value: AllowedTopology; label: string }[] = [
@@ -50,7 +53,11 @@ const TOGGLES: { key: keyof CircuitRules; label: string }[] = [
   },
   { key: "forbidShortCircuit", label: "Short circuits fail the check" },
   { key: "checkComponentValues", label: "Check component values" },
-  { key: "requireStepsCompleted", label: "All steps must be completed" },
+  {
+    key: "compareToReference",
+    label:
+      "Compare with my wired circuit (electrically equivalent, polarity checked)",
+  },
 ];
 
 type ValidationRulesDialogProps = {
@@ -75,7 +82,11 @@ export function ValidationRulesDialog({
   onSaved,
 }: ValidationRulesDialogProps) {
   // Mounted only while open, so the form starts from the saved rules.
-  const [draft, setDraft] = useState<CircuitRules>(rules ?? DEFAULT_RULES);
+  // Rules saved before a setting existed get its default.
+  const [draft, setDraft] = useState<CircuitRules>({
+    ...DEFAULT_RULES,
+    ...rules,
+  });
   const [resistanceMin, setResistanceMin] = useState(
     rules?.equivalentResistance?.min?.toString() ?? "",
   );
@@ -84,6 +95,22 @@ export function ValidationRulesDialog({
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [reference, setReference] = useState<ReferenceAnalysis | null>(null);
+  const [referenceError, setReferenceError] = useState<string | null>(null);
+  const [showGraph, setShowGraph] = useState(false);
+
+  // The saved circuit, graded the way student circuits will be compared.
+  useEffect(() => {
+    let cancelled = false;
+    getLabReference(labId).then((result) => {
+      if (cancelled) return;
+      if (result.data) setReference(result.data);
+      else setReferenceError(result.error ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [labId]);
 
   const toggleTopology = (topology: AllowedTopology) => {
     setDraft((prev) => {
@@ -120,8 +147,7 @@ export function ValidationRulesDialog({
     const max = toNumberOrNull(resistanceMax);
     save({
       ...draft,
-      equivalentResistance:
-        min === null && max === null ? null : { min, max },
+      equivalentResistance: min === null && max === null ? null : { min, max },
     });
   };
 
@@ -131,22 +157,13 @@ export function ValidationRulesDialog({
         <DialogHeader>
           <DialogTitle>Circuit Validation Rules</DialogTitle>
           <DialogDescription>
-            Define what counts as a correct circuit. The equipment placed on
-            the canvas is the list of required components. Use the gear icon
-            to give them names (e.g. R1) and values, then save the lab.
+            Define what counts as a correct circuit. The equipment placed on the
+            canvas is the list of required components. Use the gear icon to give
+            them names (e.g. R1) and values, then save the lab.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-5 py-2">
-          {!rules && (
-            <Alert>
-              <AlertDescription className="text-xs">
-                This lab currently uses basic grading (equipment and wire
-                counts). Saving these rules switches it to circuit validation.
-              </AlertDescription>
-            </Alert>
-          )}
-
           <div className="space-y-2">
             <Label>Accepted topologies</Label>
             <div className="flex flex-wrap gap-2">
@@ -253,6 +270,62 @@ export function ValidationRulesDialog({
             </p>
           </div>
 
+          <div className="space-y-2 rounded-md border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label>Your reference circuit</Label>
+              {reference?.debug && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={showGraph ? "default" : "outline"}
+                  onClick={() => setShowGraph((value) => !value)}
+                  className="gap-1"
+                >
+                  <Bug className="h-3 w-3" />
+                  {showGraph ? "Hide graph" : "Graph & tree"}
+                </Button>
+              )}
+            </div>
+            {referenceError && (
+              <p className="text-xs text-muted-foreground">{referenceError}</p>
+            )}
+            {reference && !reference.hasWires && (
+              <p className="text-xs text-muted-foreground">
+                No wires saved yet. Wire the parts on the canvas and save the
+                lab to grade students against your circuit.
+              </p>
+            )}
+            {reference?.hasWires && (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  Saved circuit: {reference.topology ?? "unknown topology"}
+                  {reference.equivalentResistance !== null &&
+                    `, Req ${reference.equivalentResistance} Ω`}
+                  . Unsaved canvas changes are not included.
+                </p>
+                <code className="block break-all rounded bg-muted px-2 py-1 text-xs">
+                  {reference.fingerprint ?? "not series-parallel"}
+                </code>
+                {reference.warnings.length > 0 && (
+                  <Alert variant="destructive">
+                    <AlertDescription className="text-xs">
+                      Your circuit has problems; students who copy it would fail
+                      these checks:
+                      <ul className="mt-1 list-disc pl-4">
+                        {reference.warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </>
+            )}
+            {showGraph && reference?.debug && (
+              <CircuitDebugView debug={reference.debug} />
+            )}
+          </div>
+
           {error && (
             <Alert variant="destructive">
               <AlertDescription className="text-sm">{error}</AlertDescription>
@@ -260,19 +333,7 @@ export function ValidationRulesDialog({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
-          {rules ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={isSaving}
-              onClick={() => save(null)}
-            >
-              Use basic grading
-            </Button>
-          ) : (
-            <span />
-          )}
+        <DialogFooter className="gap-2">
           <div className="flex gap-2">
             <Button
               type="button"

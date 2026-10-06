@@ -57,7 +57,12 @@ export const parseChatRequest = (body: unknown): AiChatRequest => {
     throw new BadRequestException(
       'End with a user message and limit history to 24000 characters.',
     );
-  const context = raw.context === undefined ? {} : record(raw.context);
+  return { messages, context: parseContext(raw.context) };
+};
+
+/** Validate page context (lab, live workspace, screen targets). */
+export const parseContext = (value: unknown): AiContext => {
+  const context = value === undefined ? {} : record(value);
   const currentStepIndex = context.currentStepIndex ?? 0;
   if (
     !Number.isInteger(currentStepIndex) ||
@@ -144,5 +149,13 @@ export const parseChatRequest = (body: unknown): AiChatRequest => {
       completedStepIds: parsed.completedStepIds,
     };
   }
-  return { messages, context: parsed };
+  return parsed;
+};
+
+/** Body of POST /ai/progress-feedback: the same context as chat. */
+export const parseProgressFeedbackRequest = (body: unknown): AiContext => {
+  const context = parseContext(record(body).context);
+  if (!context.labId || !context.workspace)
+    throw new BadRequestException('A lab id and workspace are required.');
+  return context;
 };

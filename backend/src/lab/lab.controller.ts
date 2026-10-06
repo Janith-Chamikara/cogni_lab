@@ -152,10 +152,22 @@ export class LabController {
 
   @Post(':id/validate')
   async validateCircuit(
+    @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: StudentCircuitDto,
   ) {
-    return this.labAttemptService.validate(id, dto);
+    const actor = dto?.debug === true ? await this.getActor(req.user) : null;
+    return this.labAttemptService.validate(id, dto, actor ?? undefined);
+  }
+
+  /** The instructor's circuit as the grader sees it (instructors only). */
+  @Get(':id/reference')
+  async getReference(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const actor = await this.getActor(req.user);
+    return this.labService.getReferenceAnalysis(id, actor);
   }
 
   @Post(':id/attempts')

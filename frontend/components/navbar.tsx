@@ -9,7 +9,7 @@ import Logo from "./logo";
 export function Navbar() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
-      <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between">
+      <div className="flex h-14 w-full items-center justify-between px-4">
         <Link href="/" className="flex items-center gap-2">
           <Logo />
         </Link>

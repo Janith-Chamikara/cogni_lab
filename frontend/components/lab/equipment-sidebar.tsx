@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Search, ImageIcon } from "lucide-react";
+import { Search, ImageIcon, PanelRightClose } from "lucide-react";
 import { LabEquipment } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
@@ -17,6 +18,8 @@ const getCloudinaryUrl = (publicId?: string | null) => {
 
 type EquipmentSidebarProps = {
   equipments: LabEquipment[];
+  /** Shows a button that hides the sidebar. */
+  onCollapse?: () => void;
 };
 
 function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
@@ -31,6 +34,7 @@ function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
     <div
       draggable
       onDragStart={handleDragStart}
+      title={`Drag ${equipment.equipmentName} onto the canvas`}
       className="flex cursor-grab flex-col items-center rounded-lg border bg-card p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing"
     >
       {imageUrl ? (
@@ -54,7 +58,10 @@ function DraggableSidebarItem({ equipment }: { equipment: LabEquipment }) {
   );
 }
 
-export function EquipmentSidebar({ equipments }: EquipmentSidebarProps) {
+export function EquipmentSidebar({
+  equipments,
+  onCollapse,
+}: EquipmentSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredEquipments = equipments.filter(
@@ -64,9 +71,22 @@ export function EquipmentSidebar({ equipments }: EquipmentSidebarProps) {
   );
 
   return (
-    <aside className="flex w-64 flex-col border-l bg-background">
-      <div className="border-b p-4">
-        <h2 className="mb-3 font-semibold">Equipment &amp; Materials</h2>
+    <aside className="flex w-64 shrink-0 flex-col border-l bg-background xl:w-72">
+      <div className="border-b p-4 pt-2">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Equipment &amp; Materials</h2>
+          {onCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onCollapse}
+              title="Hide equipment"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input

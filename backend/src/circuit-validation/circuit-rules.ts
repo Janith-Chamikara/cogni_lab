@@ -28,6 +28,9 @@ export const DEFAULT_CHECK_WEIGHTS: Record<CheckKey, number> = {
   topology: 20,
   equivalentResistance: 10,
   steps: 10,
+  matchesReference: 30,
+  polarity: 10,
+  instruments: 10,
 };
 
 export const DEFAULT_CIRCUIT_RULES: CircuitRules = {
@@ -40,6 +43,7 @@ export const DEFAULT_CIRCUIT_RULES: CircuitRules = {
   valueTolerancePercent: 5,
   equivalentResistance: null,
   requireStepsCompleted: true,
+  compareToReference: true,
 };
 
 export class InvalidCircuitRulesError extends Error {}
@@ -161,11 +165,16 @@ export const normalizeCircuitRules = (input: unknown): CircuitRules => {
       DEFAULT_CIRCUIT_RULES.requireStepsCompleted,
       'requireStepsCompleted',
     ),
+    compareToReference: optionalBoolean(
+      raw.compareToReference,
+      DEFAULT_CIRCUIT_RULES.compareToReference,
+      'compareToReference',
+    ),
     ...(weights && { weights }),
   };
 };
 
-/** Read stored rules. Returns null (legacy grading) for missing/invalid data. */
+/** Read stored rules. Returns null (use the defaults) for missing/invalid data. */
 export const readStoredCircuitRules = (
   stored: unknown,
 ): CircuitRules | null => {

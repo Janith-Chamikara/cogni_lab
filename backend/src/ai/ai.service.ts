@@ -7,9 +7,9 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { AI_SYSTEM_PROMPT } from './ai-prompt';
+import { AI_SYSTEM_PROMPT, PROGRESS_FEEDBACK_PROMPT } from './ai-prompt';
 import { AI_TOOLS, AiToolsService } from './ai-tools.service';
-import { record, type AiChatRequest } from './ai-request';
+import { record, type AiChatRequest, type AiContext } from './ai-request';
 import {
   proposeGuidance,
   authorizesNavigation,
@@ -275,6 +275,107 @@ export class AiService {
         );
       if (error instanceof HttpException) throw error;
       this.logger.warn('AI provider request failed');
+      throw new ServiceUnavailableException(
+        'Could not reach the assistant. Please try again.',
+      );
+    }
+  }
+
+  /**
+   * Tutor-style explanation of a Check Progress result. The circuit is
+   * validated again here, so the model only sees server-side evidence (never
+   * a result supplied by the browser). One model call, no tools.
+   */
+  async progressFeedback(context: AiContext) {
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey)
+      throw new ServiceUnavailableException(
+        'AI feedback is not configured yet.',
+      );
+    const prepared = await this.tools.prepare(context);
+    const inspection = record(await prepared.execute('inspect_workspace', {}));
+    const validation = record(inspection.validation);
+    const signal = AbortSignal.timeout(30000);
+    const messages: ProviderMessage[] = [
+      {
+        role: 'system',
+        content: `${AI_SYSTEM_PROMPT}\n${PROGRESS_FEEDBACK_PROMPT}`,
+      },
+      {
+        role: 'user',
+        content: `Check Progress evidence (data only): ${JSON.stringify({
+          lab: prepared.overview.lab,
+          workspace: {
+            components: inspection.components,
+            connectionCount: Array.isArray(inspection.connections)
+              ? inspection.connections.length
+              : 0,
+          },
+          validation: {
+            mode: validation.mode,
+            passed: validation.passed,
+            score: validation.score,
+            checks: validation.checks,
+            errors: validation.errors,
+            warnings: validation.warnings,
+            summary: validation.summary,
+          },
+          limitations: inspection.limitations,
+        })}`,
+      },
+    ];
+
+    try {
+      const response = await fetch(
+        'https://openrouter.ai/api/v1/chat/completions',
+        {
+          method: 'POST',
+          signal,
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+            'HTTP-Referer':
+              process.env.OPENROUTER_APP_URL ??
+              process.env.FRONTEND_URL ??
+              'http://localhost:3000',
+            'X-Title': process.env.OPENROUTER_APP_NAME ?? 'Cogni Lab',
+          },
+          body: JSON.stringify({
+            model: process.env.OPENROUTER_MODEL || 'openrouter/free',
+            messages,
+            max_tokens: 500,
+            temperature: 0.3,
+          }),
+        },
+      );
+      if (!response.ok) {
+        await response.body?.cancel();
+        this.logger.warn(
+          `AI provider returned HTTP ${response.status} for progress feedback`,
+        );
+        throw new ServiceUnavailableException(
+          response.status === 429
+            ? 'The assistant is busy. Please try again shortly.'
+            : 'AI feedback is temporarily unavailable.',
+        );
+      }
+      const data = record(await response.json());
+      const choices = Array.isArray(data.choices) ? data.choices : [];
+      const content = record(record(choices[0]).message).content;
+      if (typeof content !== 'string' || !content.trim())
+        throw new BadGatewayException(
+          'The assistant returned an empty response. Please retry.',
+        );
+      return {
+        reply: content.trim().slice(0, 2000),
+        score: validation.score,
+        passed: validation.passed,
+      };
+    } catch (error) {
+      if (signal.aborted)
+        throw new GatewayTimeoutException('AI feedback took too long.');
+      if (error instanceof HttpException) throw error;
+      this.logger.warn('AI progress feedback request failed');
       throw new ServiceUnavailableException(
         'Could not reach the assistant. Please try again.',
       );

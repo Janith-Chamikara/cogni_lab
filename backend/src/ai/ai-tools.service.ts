@@ -148,8 +148,6 @@ export class AiToolsService {
           })),
           referenceConnections: lab.wireConnections.slice(0, 200),
           rules: lab.circuitRulesJson,
-          referenceGuideAvailable:
-            context.route?.startsWith('/student/lab/') ?? false,
         }
       : null;
     const workspace = context.workspace;
@@ -186,7 +184,6 @@ export class AiToolsService {
               currentStep: guide.steps[context.currentStepIndex] ?? null,
               totalSteps: steps.length,
               tolerances: guide.tolerances,
-              referenceGuideAvailable: guide.referenceGuideAvailable,
             }
           : null,
         workspaceAvailable: Boolean(workspace),
@@ -215,7 +212,7 @@ export class AiToolsService {
             ...workspaceSummary,
             validation,
             limitations:
-              'Rule mode checks supported topology. Legacy mode checks equipment, counts and steps only. Neither mode is an electrical simulator or a verified measurement. This is an unsaved progress check.',
+              'Validation checks the circuit graph against the lab rules and the instructor circuit. It is not an electrical simulator or a verified measurement. This is an unsaved progress check.',
           };
         }
         return { error: 'Unknown tool. Use only available tools.' };

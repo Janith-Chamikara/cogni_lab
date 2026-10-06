@@ -21,7 +21,18 @@ const makeLab = (circuitRulesJson: unknown) => ({
     equipment: resistorEquipment,
   })),
   experimentSteps: [],
-  _count: { wireConnections: 2 },
+  // The instructor wired R1 ∥ R2 ∥ R3.
+  wireConnections: [
+    ['p1', 'left', 'p2', 'left'],
+    ['p2', 'left', 'p3', 'left'],
+    ['p1', 'right', 'p2', 'right'],
+    ['p2', 'right', 'p3', 'right'],
+  ].map(([source, sourceHandle, target, targetHandle]) => ({
+    sourceEquipmentId: source,
+    sourceHandle,
+    targetEquipmentId: target,
+    targetHandle,
+  })),
 });
 
 const component = (n: number) => ({
@@ -78,7 +89,7 @@ const makePrisma = (lab: unknown) => {
 };
 
 describe('LabAttemptService', () => {
-  it('Test 8: an existing lab without rules keeps legacy grading', async () => {
+  it('Test 8: a lab without saved rules is validated with the defaults', async () => {
     const service = new LabAttemptService(makePrisma(makeLab(null)).prisma);
 
     const result = await service.validate(
@@ -86,9 +97,9 @@ describe('LabAttemptService', () => {
       parallelCircuit as unknown as StudentCircuitDto,
     );
 
-    expect(result.mode).toBe('legacy');
+    expect(result.mode).toBe('rules');
     expect(result.passed).toBe(true);
-    expect(result.score).toBe(100);
+    expect(result.checks.matchesReference?.passed).toBe(true);
   });
 
   it('uses rule-based grading once the instructor sets rules', async () => {
@@ -127,6 +138,86 @@ describe('LabAttemptService', () => {
     });
   });
 
+  it('compares the student circuit with the instructor circuit', async () => {
+    const lab = makeLab({ allowedTopologies: ['any'] });
+    const service = new LabAttemptService(makePrisma(lab).prisma);
+
+    const matching = await service.validate(
+      'lab-1',
+      parallelCircuit as unknown as StudentCircuitDto,
+    );
+    expect(matching.checks.matchesReference?.passed).toBe(true);
+
+    const series = await service.validate('lab-1', {
+      components: [component(1), component(2), component(3)],
+      connections: [
+        {
+          sourceEquipmentId: 's1',
+          sourceHandle: 'right',
+          targetEquipmentId: 's2',
+          targetHandle: 'left',
+        },
+        {
+          sourceEquipmentId: 's2',
+          sourceHandle: 'right',
+          targetEquipmentId: 's3',
+          targetHandle: 'left',
+        },
+      ],
+    } as unknown as StudentCircuitDto);
+    expect(series.checks.matchesReference?.passed).toBe(false);
+    expect(series.errors).toContain(
+      'R1 and R2 should be in parallel, but they are in series',
+    );
+  });
+
+  it('returns debug details only to instructors', async () => {
+    const lab = makeLab({ allowedTopologies: ['any'] });
+    const service = new LabAttemptService(makePrisma(lab).prisma);
+    const body = {
+      ...parallelCircuit,
+      debug: true,
+    } as unknown as StudentCircuitDto;
+    const student = { userId: 'u', isInstructor: false, isAdmin: false };
+    const instructor = { userId: 'i', isInstructor: true, isAdmin: false };
+
+    expect((await service.validate('lab-1', body, student)).debug).toBe(
+      undefined,
+    );
+    const result = await service.validate('lab-1', body, instructor);
+    expect(result.debug?.student.fingerprint).toBe('P(R:100,R:200,R:300)');
+    expect(result.debug?.comparison?.match).toBe(true);
+  });
+
+  it('adds debug details to labs without saved rules', async () => {
+    const service = new LabAttemptService(makePrisma(makeLab(null)).prisma);
+    const instructor = { userId: 'i', isInstructor: true, isAdmin: false };
+
+    const result = await service.validate(
+      'lab-1',
+      { ...parallelCircuit, debug: true } as unknown as StudentCircuitDto,
+      instructor,
+    );
+    expect(result.mode).toBe('rules');
+    expect(result.passed).toBe(true);
+    expect(result.debug?.student.fingerprint).toBe('P(R:100,R:200,R:300)');
+  });
+
+  it('does not grade experiment steps', async () => {
+    const lab = {
+      ...makeLab({ allowedTopologies: ['any'], requireStepsCompleted: true }),
+      experimentSteps: [{ id: 'step-1' }, { id: 'step-2' }],
+    };
+    const service = new LabAttemptService(makePrisma(lab).prisma);
+
+    const result = await service.validate(
+      'lab-1',
+      parallelCircuit as unknown as StudentCircuitDto,
+    );
+    expect(result.checks.steps).toBeUndefined();
+    expect(result.passed).toBe(true);
+  });
+
   it('rejects malformed circuit payloads', async () => {
     const service = new LabAttemptService(makePrisma(makeLab(null)).prisma);
 
@@ -136,6 +227,38 @@ describe('LabAttemptService', () => {
         connections: [],
       } as unknown as StudentCircuitDto),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('LabAttemptService.findMine', () => {
+  it('returns the latest submitted circuit without the older ones', async () => {
+    const { prisma, mocks } = makePrisma(null);
+    const latestCircuit = { components: [{ id: 's1' }], connections: [] };
+    mocks.findAttempts.mockResolvedValue([
+      {
+        id: 'new',
+        score: 70,
+        passed: false,
+        circuitStateJson: latestCircuit,
+        submittedAt: new Date('2026-10-03'),
+      },
+      {
+        id: 'old',
+        score: 100,
+        passed: true,
+        circuitStateJson: { components: [], connections: [] },
+        submittedAt: new Date('2026-10-01'),
+      },
+    ]);
+
+    const mine = await new LabAttemptService(prisma).findMine('lab-1', 'u1');
+
+    expect(mine.latestSubmission).toMatchObject({
+      attemptId: 'new',
+      circuit: latestCircuit,
+    });
+    expect(mine.bestAttempt?.id).toBe('old');
+    expect(mine.attempts.every((a) => !('circuitStateJson' in a))).toBe(true);
   });
 });
 
@@ -178,8 +301,14 @@ describe('LabAttemptService.findMySummary', () => {
 });
 
 describe('pickBestAttempt', () => {
-  it('chooses the highest score, then a passing attempt, then the earliest', () => {
+  it('chooses a validated attempt, then the most checks passed, then the earliest', () => {
     const attempts = [
+      {
+        id: 'high-but-not-validated',
+        score: 95,
+        passed: false,
+        submittedAt: new Date('2026-09-30'),
+      },
       {
         id: 'late',
         score: 90,

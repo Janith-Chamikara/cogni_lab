@@ -16,11 +16,13 @@ import {
   EdgeTypes,
   BackgroundVariant,
   ConnectionLineType,
+  ConnectionMode,
   MarkerType,
   useReactFlow,
   ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { getTerminals, resolveHandleId } from "@/lib/circuit-terminals";
 import { Cable } from "lucide-react";
 import { WireConnection } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -56,6 +58,8 @@ function CircuitCanvasInner({
   onEquipmentConfig,
   onConnectionsChange,
   onEquipmentDrop,
+  toolbarStart,
+  toolbarEnd,
 }: CircuitCanvasProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -64,6 +68,19 @@ function CircuitCanvasInner({
   );
   const [isWireMode, setIsWireMode] = useState(false);
   const theme = useTheme();
+
+  // Named terminals per node, so wires saved with legacy handle ids
+  // (left/right/top/bottom) attach to the matching named handle.
+  const terminalsById = useMemo(
+    () =>
+      new Map(
+        placedEquipments.map((eq, index) => [
+          eq.id || `temp-${index}`,
+          getTerminals(eq.equipment),
+        ]),
+      ),
+    [placedEquipments],
+  );
 
   // Convert placed equipments to React Flow nodes
   const initialNodes: Node[] = useMemo(
@@ -90,8 +107,16 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "animatedCurrent",
         style: {
           stroke: conn.wireColor || "#374151",
@@ -102,7 +127,7 @@ function CircuitCanvasInner({
           color: conn.wireColor || "#374151",
         },
       })),
-    [wireConnections],
+    [wireConnections, terminalsById],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -139,8 +164,16 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "animatedCurrent",
         style: {
           stroke: conn.wireColor || "#374151",
@@ -152,7 +185,7 @@ function CircuitCanvasInner({
         },
       })),
     );
-  }, [wireConnections, setEdges]);
+  }, [wireConnections, setEdges, terminalsById]);
 
   // Handle new wire connection
   const onConnect = useCallback(
@@ -193,8 +226,9 @@ function CircuitCanvasInner({
   const onEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
       const deletedIds = new Set(deletedEdges.map((e) => e.id));
+      // Unsaved wires have no id; their edges use "edge-<index>".
       const remainingConnections = wireConnections.filter(
-        (conn) => !deletedIds.has(conn.id || ""),
+        (conn, index) => !deletedIds.has(conn.id || `edge-${index}`),
       );
       onConnectionsChange(remainingConnections);
     },
@@ -247,8 +281,9 @@ function CircuitCanvasInner({
   );
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b bg-card px-4 py-2">
+    <div className="relative flex h-full flex-col">
+      <div className="flex items-center gap-2 border-b bg-card px-3 py-1.5">
+        {toolbarStart}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -271,34 +306,36 @@ function CircuitCanvasInner({
         </TooltipProvider>
 
         {isWireMode && (
-          <div className="flex items-center gap-2 border-l pl-4">
-            <span className="text-sm text-muted-foreground">Wire Color:</span>
-            <div className="flex gap-1">
-              {WIRE_COLORS.map((color) => (
-                <button
-                  key={color.value}
-                  className={`h-6 w-6 rounded-full border-2 transition-all ${
-                    selectedWireColor === color.value
-                      ? "border-foreground ring-2 ring-ring"
-                      : "border-transparent hover:border-muted-foreground"
-                  }`}
-                  style={{ backgroundColor: color.value }}
-                  onClick={() => setSelectedWireColor(color.value)}
-                  title={color.name}
-                />
-              ))}
-            </div>
+          <div className="flex items-center gap-1 border-l pl-3">
+            {WIRE_COLORS.map((color) => (
+              <button
+                key={color.value}
+                type="button"
+                className={`h-5 w-5 rounded-full border-2 transition-all ${
+                  selectedWireColor === color.value
+                    ? "border-foreground ring-2 ring-ring"
+                    : "border-transparent hover:border-muted-foreground"
+                }`}
+                style={{ backgroundColor: color.value }}
+                onClick={() => setSelectedWireColor(color.value)}
+                title={`Wire colour: ${color.name}`}
+              />
+            ))}
           </div>
         )}
 
-        <div className="ml-auto text-sm text-muted-foreground">
+        <p className="ml-2 hidden min-w-0 flex-1 truncate text-xs text-muted-foreground lg:block">
           {isWireMode
-            ? "Drag from a green handle to a blue handle to connect"
-            : "Drag components to move them"}
-        </div>
+            ? "Drag from one terminal to another to connect. Select a wire and press Delete to remove it."
+            : "Drag equipment onto the canvas. Hover a part to configure or remove it."}
+        </p>
+
+        {toolbarEnd && (
+          <div className="ml-auto flex items-center gap-1">{toolbarEnd}</div>
+        )}
       </div>
 
-      <div className="flex-1" ref={reactFlowWrapper}>
+      <div className="relative min-h-0 flex-1" ref={reactFlowWrapper}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -311,23 +348,28 @@ function CircuitCanvasInner({
           onDrop={onDrop}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          // Named terminals are all "source" handles; any terminal may
+          // connect to any other (e.g. R1.1 to R2.1 for parallel wiring).
+          connectionMode={ConnectionMode.Loose}
+          isValidConnection={(conn) =>
+            !(
+              conn.source === conn.target &&
+              conn.sourceHandle === conn.targetHandle
+            )
+          }
           connectionLineType={ConnectionLineType.Bezier}
           connectionLineStyle={{ stroke: selectedWireColor, strokeWidth: 2 }}
           fitView
-          colorMode={
-            theme.theme === "dark"
-              ? "dark"
-              : theme.theme === "light"
-                ? "light"
-                : "system"
-          }
+          // resolvedTheme is what the page actually shows ("system" resolved).
+          colorMode={theme.resolvedTheme === "dark" ? "dark" : "light"}
           snapToGrid
           snapGrid={[20, 20]}
           deleteKeyCode={["Backspace", "Delete"]}
           className={isWireMode ? "cursor-crosshair" : ""}
         >
           <Controls className="bg-background text-foreground" />
-          <MiniMap />
+          {/* Top right: the chat button sits in the bottom-right corner. */}
+          <MiniMap position="top-right" />
           <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         </ReactFlow>
       </div>

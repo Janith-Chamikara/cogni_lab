@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Search, ImageIcon } from "lucide-react";
+import { Search, ImageIcon, CheckCircle2, PanelRightClose } from "lucide-react";
 import type { EquipmentPlacement } from "@/lib/types";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const cloudinaryCloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
 
@@ -50,12 +51,18 @@ export const getPlacementDisplayName = (placement: EquipmentPlacement) => {
 type StudentEquipmentSidebarProps = {
   /** The lab's required components (instructor placements). */
   placements: EquipmentPlacement[];
+  /** Copies of each placement already on the canvas, by placement id. */
+  placedCounts?: Map<string, number>;
+  /** Shows a button that hides the sidebar. */
+  onCollapse?: () => void;
 };
 
 function DraggableSidebarItem({
   placement,
+  placedCount = 0,
 }: {
   placement: EquipmentPlacement;
+  placedCount?: number;
 }) {
   const equipment = placement.equipment!;
   const imageUrl = getCloudinaryUrl(equipment.imageUrl);
@@ -70,8 +77,20 @@ function DraggableSidebarItem({
     <div
       draggable
       onDragStart={handleDragStart}
-      className="flex cursor-grab flex-col items-center rounded-lg border bg-card p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing"
+      title={`Drag ${placement.componentLabel ?? equipment.equipmentName} onto the canvas`}
+      className={`relative flex cursor-grab flex-col items-center rounded-lg border bg-card p-3 shadow-sm transition-all hover:border-primary hover:shadow-md active:cursor-grabbing ${
+        placedCount > 0 ? "border-green-500/40" : ""
+      }`}
     >
+      {placedCount > 0 && (
+        <span
+          className="absolute right-1.5 top-1.5 flex items-center gap-0.5 text-[10px] font-medium text-green-600 dark:text-green-400"
+          title="Already on the canvas"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          {placedCount > 1 && `×${placedCount}`}
+        </span>
+      )}
       {imageUrl ? (
         <div className="relative h-12 w-12">
           <Image
@@ -98,6 +117,8 @@ function DraggableSidebarItem({
 
 export function StudentEquipmentSidebar({
   placements,
+  placedCounts,
+  onCollapse,
 }: StudentEquipmentSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -114,9 +135,22 @@ export function StudentEquipmentSidebar({
   );
 
   return (
-    <aside className="flex w-64 flex-col border-l bg-background flex-shrink-0">
-      <div className="border-b p-4">
-        <h2 className="mb-3 font-semibold">Equipment & Materials</h2>
+    <aside className="flex w-64 flex-shrink-0 flex-col border-l bg-background xl:w-72">
+      <div className="border-b p-4 pt-2">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">Equipment & Materials</h2>
+          {onCollapse && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={onCollapse}
+              title="Hide equipment"
+            >
+              <PanelRightClose className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -134,7 +168,11 @@ export function StudentEquipmentSidebar({
         </h3>
         <div className="grid grid-cols-2 gap-3">
           {filteredPlacements.map((placement) => (
-            <DraggableSidebarItem key={placement.id} placement={placement} />
+            <DraggableSidebarItem
+              key={placement.id}
+              placement={placement}
+              placedCount={placedCounts?.get(placement.id!) ?? 0}
+            />
           ))}
         </div>
 

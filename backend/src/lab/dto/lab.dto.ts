@@ -6,6 +6,7 @@ import {
   ValidateNested,
   IsEnum,
   IsObject,
+  IsBoolean,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
@@ -178,7 +179,7 @@ export class UpdateWireConnectionsDto {
 // ---- Circuit validation ---------------------------------------------------
 
 export class UpdateCircuitRulesDto {
-  // Null clears the rules and returns the lab to legacy grading.
+  // Null clears the rules; the lab is then validated with the defaults.
   // Shape is validated by normalizeCircuitRules in the service.
   @IsOptional()
   @IsObject()
@@ -248,4 +249,8 @@ export class StudentCircuitDto {
   @ValidateNested({ each: true })
   @Type(() => StudentActionDto)
   actionLog?: StudentActionDto[];
+  // Ask for graph/tree/fingerprint details (instructors or CIRCUIT_DEBUG).
+  @IsOptional()
+  @IsBoolean()
+  debug?: boolean;
 }

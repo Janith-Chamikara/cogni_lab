@@ -6,6 +6,8 @@ export type LabEquipment = {
   supportsConfiguration: boolean;
   defaultConfigJson?: Record<string, unknown> | string | null;
   imageUrl?: string | null;
+  /** Named connection points drawn as canvas handles (from the API). */
+  terminals?: TerminalSpec[];
   creator?: {
     id: string;
     fullName: string | null;
@@ -164,7 +166,18 @@ export type CircuitRules = {
   valueTolerancePercent: number;
   equivalentResistance?: { min?: number | null; max?: number | null } | null;
   requireStepsCompleted: boolean;
+  /** Compare student circuits with the instructor's wired circuit. */
+  compareToReference?: boolean;
   weights?: Record<string, number>;
+};
+
+export type TerminalSpec = {
+  /** Handle id stored on wires, e.g. "pos". */
+  id: string;
+  /** Short label drawn next to the handle, e.g. "+". */
+  label: string;
+  name: string;
+  side: "left" | "right" | "top" | "bottom";
 };
 
 export type ValidationCheck = {
@@ -172,11 +185,13 @@ export type ValidationCheck = {
   label: string;
   message: string;
   weight: number;
+  /** Share of the weight earned although the check failed (0-1). */
+  partial?: number;
   detected?: string | number | null;
 };
 
 export type ValidationResult = {
-  mode: "rules" | "legacy";
+  mode: "rules";
   passed: boolean;
   score: number;
   checks: Record<string, ValidationCheck>;
@@ -188,6 +203,85 @@ export type ValidationResult = {
     componentCount: number;
     connectionCount: number;
   };
+  /** Only when debugging is enabled (see CircuitDebugToggle). */
+  debug?: ValidationDebug;
+};
+
+// Circuit debug details (mirror backend/src/circuit-validation/types.ts)
+export type Orientation = "forward" | "reverse";
+export type Relation = "series" | "parallel";
+
+export type DebugTree =
+  | {
+      type: "leaf";
+      elementId: string;
+      label: string;
+      token: string;
+      from: string;
+      to: string;
+    }
+  | {
+      type: "series" | "parallel";
+      token: string;
+      from: string;
+      to: string;
+      children: DebugTree[];
+    };
+
+export type CircuitDebug = {
+  nodes: { id: string; terminals: string[] }[];
+  elements: {
+    id: string;
+    label: string;
+    token: string;
+    nodes: [string, string];
+    role: string;
+    polar: boolean;
+    orientation: Orientation | null;
+    inTree: boolean;
+  }[];
+  source: string | null;
+  ports: { plus: string; minus: string } | null;
+  tree: DebugTree | null;
+  fingerprint: string | null;
+  topology: string | null;
+};
+
+export type ComparisonDebug = {
+  match: boolean;
+  method: "tree" | "partition" | "none";
+  mapping: { student: string; reference: string }[];
+  pairs: {
+    a: string;
+    b: string;
+    reference: Relation;
+    student: Relation | null;
+  }[];
+  polarity: { label: string; reference: Orientation; student: Orientation }[];
+  partialScore: number;
+};
+
+export type ValidationDebug = {
+  student: CircuitDebug;
+  reference: CircuitDebug | null;
+  comparison: ComparisonDebug | null;
+};
+
+/** POST /ai/progress-feedback: AI explanation of a Check Progress result. */
+export type ProgressFeedback = {
+  reply: string;
+  score: number;
+  passed: boolean;
+};
+
+/** GET /labs/:id/reference: the instructor's circuit as the grader sees it. */
+export type ReferenceAnalysis = {
+  hasWires: boolean;
+  fingerprint: string | null;
+  topology: string | null;
+  equivalentResistance: number | null;
+  warnings: string[];
+  debug: CircuitDebug | null;
 };
 
 export type StudentComponent = {
@@ -211,12 +305,15 @@ export type StudentCircuitPayload = {
   connections: Omit<WireConnection, "id" | "labId">[];
   completedStepIds: string[];
   actionLog?: StudentAction[];
+  /** Ask for graph/tree/fingerprint details (instructors or CIRCUIT_DEBUG). */
+  debug?: boolean;
 };
 
 export type LabAttempt = {
   id: string;
   score: number;
   passed: boolean;
+  /** "legacy" only on attempts stored before basic grading was removed. */
   validationMode: "rules" | "legacy";
   validationResultJson: ValidationResult;
   submittedAt: string;
@@ -225,6 +322,13 @@ export type LabAttempt = {
 export type MyLabAttempts = {
   attempts: LabAttempt[];
   bestAttempt: LabAttempt | null;
+  /** The latest submission's circuit, shown again when the student returns. */
+  latestSubmission: {
+    attemptId: string;
+    submittedAt: string;
+    passed: boolean;
+    circuit: unknown;
+  } | null;
 };
 
 export type SubmitAttemptResult = {

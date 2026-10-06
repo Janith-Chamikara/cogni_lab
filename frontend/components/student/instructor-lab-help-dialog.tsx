@@ -44,19 +44,26 @@ export function InstructorLabHelpDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent data-ai-reference-guide="" className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        data-ai-reference-guide=""
+        className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lightbulb className="h-5 w-5 text-yellow-500" />
             Instructor Lab Design - Reference Guide
           </DialogTitle>
           <DialogDescription>
-            Use this guide to understand the lab layout and design from your instructor.
-            This reference can help you complete the experiment successfully.
+            Use this guide to understand the lab layout and design from your
+            instructor. This reference can help you complete the experiment
+            successfully.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="overview" className="flex-1 overflow-hidden flex flex-col">
+        <Tabs
+          defaultValue="overview"
+          className="flex-1 overflow-hidden flex flex-col"
+        >
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="equipment">Equipment</TabsTrigger>
@@ -124,9 +131,9 @@ export function InstructorLabHelpDialog({
                     <Alert>
                       <Lightbulb className="h-4 w-4" />
                       <AlertDescription>
-                        This reference guide shows the complete lab design as set up by
-                        your instructor. Use it to understand the expected layout and
-                        configuration.
+                        This reference guide shows the complete lab design as
+                        set up by your instructor. Use it to understand the
+                        expected layout and configuration.
                       </AlertDescription>
                     </Alert>
                   </CardContent>
@@ -142,7 +149,8 @@ export function InstructorLabHelpDialog({
                       Equipment Setup
                     </CardTitle>
                     <CardDescription>
-                      All equipment items that need to be configured for this lab
+                      All equipment items that need to be configured for this
+                      lab
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -238,10 +246,12 @@ export function InstructorLabHelpDialog({
                       <div className="space-y-3">
                         {wireConnections.map((connection, index) => {
                           const sourceEquip = requiredEquipment.find(
-                            (e) => e.equipmentId === connection.sourceEquipmentId
+                            (e) =>
+                              e.equipmentId === connection.sourceEquipmentId,
                           );
                           const targetEquip = requiredEquipment.find(
-                            (e) => e.equipmentId === connection.targetEquipmentId
+                            (e) =>
+                              e.equipmentId === connection.targetEquipmentId,
                           );
 
                           return (
@@ -358,16 +368,16 @@ export function InstructorLabHelpDialog({
 
                             {step.minTolerance !== null &&
                               step.maxTolerance !== null && (
-                              <div className="p-2 bg-green-50 dark:bg-green-950 rounded">
-                                <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">
-                                  Success Criteria:
-                                </p>
-                                <p className="text-sm font-mono">
-                                  {step.minTolerance} to {step.maxTolerance}{" "}
-                                  {step.unit ? `(${step.unit})` : ""}
-                                </p>
-                              </div>
-                            )}
+                                <div className="p-2 bg-green-50 dark:bg-green-950 rounded">
+                                  <p className="text-xs text-green-700 dark:text-green-300 font-medium mb-1">
+                                    Success Criteria:
+                                  </p>
+                                  <p className="text-sm font-mono">
+                                    {step.minTolerance} to {step.maxTolerance}{" "}
+                                    {step.unit ? `(${step.unit})` : ""}
+                                  </p>
+                                </div>
+                              )}
                           </div>
                         ))}
                       </div>

@@ -19,6 +19,7 @@ import {
   ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { getTerminals, resolveHandleId } from "@/lib/circuit-terminals";
 import { EquipmentNode } from "@/components/lab/circuit-canvas/equipment-node";
 import { useTheme } from "next-themes";
 import { WIRE_COLORS } from "@/components/lab/circuit-canvas/constants";
@@ -62,6 +63,19 @@ function CircuitCanvasInner({
   const { screenToFlowPosition } = useReactFlow();
   const theme = useTheme();
 
+  // Named terminals per node, so wires saved with legacy handle ids
+  // (left/right/top/bottom) attach to the matching named handle.
+  const terminalsById = useMemo(
+    () =>
+      new Map(
+        placedEquipments.map((eq, index) => [
+          eq.id || `temp-${index}`,
+          getTerminals(eq.equipment),
+        ]),
+      ),
+    [placedEquipments],
+  );
+
   // Convert placed equipments to React Flow nodes
   const initialNodes: Node[] = useMemo(
     () =>
@@ -73,9 +87,8 @@ function CircuitCanvasInner({
           equipment: eq.equipment,
           index,
           onRemove: onEquipmentRemove,
-          // Student view does not support equipment config yet,
-          // so we pass a no-op handler for onConfig.
-          onConfig: () => {},
+          // No onConfig: component values come from the instructor's
+          // placements (the grader ignores student-side values).
           looseTerminals: true,
         },
         draggable: !isWireMode,
@@ -90,8 +103,16 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "smoothstep",
         style: {
           stroke: conn.wireColor || "#374151",
@@ -100,7 +121,7 @@ function CircuitCanvasInner({
         // No arrowheads: a wire has no electrical direction.
         animated: true,
       })),
-    [wireConnections],
+    [wireConnections, terminalsById],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -117,7 +138,6 @@ function CircuitCanvasInner({
           equipment: eq.equipment,
           index,
           onRemove: onEquipmentRemove,
-          onConfig: () => {},
           looseTerminals: true,
         },
         draggable: !isWireMode,
@@ -132,8 +152,16 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "smoothstep",
         style: {
           stroke: conn.wireColor || "#22c55e",
@@ -142,7 +170,7 @@ function CircuitCanvasInner({
         animated: true,
       })),
     );
-  }, [wireConnections, setEdges]);
+  }, [wireConnections, setEdges, terminalsById]);
 
   const onNodeDragStop = useCallback(
     (_: any, node: Node) => {
@@ -158,7 +186,7 @@ function CircuitCanvasInner({
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!isWireMode) return;
-      
+
       const newConnection = {
         id: `conn-${Date.now()}`,
         sourceEquipmentId: connection.source,
@@ -278,17 +306,14 @@ function CircuitCanvasInner({
           type: "smoothstep",
           animated: true,
         }}
-        colorMode={
-          theme.theme === "dark"
-            ? "dark"
-            : theme.theme === "light"
-              ? "light"
-              : "system"
-        }
+        // resolvedTheme is what the page actually shows ("system" resolved).
+        colorMode={theme.resolvedTheme === "dark" ? "dark" : "light"}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <Controls />
         <MiniMap
+          // Top right: the chat button sits in the bottom-right corner.
+          position="top-right"
           nodeStrokeWidth={3}
           zoomable
           pannable

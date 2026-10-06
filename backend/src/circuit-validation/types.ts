@@ -11,6 +11,10 @@ export type ComponentKind =
   | 'power_source'
   | 'switch'
   | 'motor'
+  | 'potentiometer'
+  | 'ammeter'
+  | 'voltmeter'
+  | 'multimeter'
   | 'instrument'
   | 'unknown';
 
@@ -35,7 +39,10 @@ export type CheckKey =
   | 'circuitClosed'
   | 'topology'
   | 'equivalentResistance'
-  | 'steps';
+  | 'steps'
+  | 'matchesReference'
+  | 'polarity'
+  | 'instruments';
 
 /** Instructor-defined grading rules, stored in LabInstance.circuitRulesJson. */
 export interface CircuitRules {
@@ -50,7 +57,22 @@ export interface CircuitRules {
   /** Required equivalent resistance range, in ohms. */
   equivalentResistance?: { min?: number | null; max?: number | null } | null;
   requireStepsCompleted: boolean;
+  /** Compare the student's circuit with the instructor's wired circuit. */
+  compareToReference: boolean;
   weights?: Partial<Record<CheckKey, number>>;
+}
+
+export type TerminalSide = 'left' | 'right' | 'top' | 'bottom';
+
+/** A named connection point of a component (a canvas handle). */
+export interface TerminalSpec {
+  /** Handle id stored on wires, e.g. "pos". */
+  id: string;
+  /** Short label shown on the canvas, e.g. "+". */
+  label: string;
+  /** Name used in messages, e.g. "positive terminal". */
+  name: string;
+  side: TerminalSide;
 }
 
 /** A component as seen by the engine (required or placed by the student). */
@@ -59,6 +81,12 @@ export interface CircuitComponent {
   label: string;
   kind: ComponentKind;
   value?: number | null;
+  /** Instructor placement this component comes from (student circuits). */
+  refId?: string | null;
+  /** Extra numeric settings, e.g. a potentiometer's wiperPosition (0-1). */
+  params?: Record<string, number>;
+  /** Terminal override from the equipment config (same count as the kind). */
+  terminals?: TerminalSpec[] | null;
 }
 
 /** A wire between two component handles (canvas handle ids, e.g. "left"). */
@@ -82,14 +110,16 @@ export interface CheckResult {
   label: string;
   message: string;
   weight: number;
+  /** Share of the weight earned when the check fails (0-1), if partial. */
+  partial?: number;
   detected?: string | number | null;
 }
 
 export interface ValidationResult {
-  mode: 'rules' | 'legacy';
+  mode: 'rules';
   passed: boolean;
   score: number;
-  // Keyed by CheckKey in rule mode; legacy mode uses its own keys.
+  // Keyed by CheckKey.
   checks: Partial<Record<string, CheckResult>>;
   errors: string[];
   warnings: string[];
@@ -99,4 +129,69 @@ export interface ValidationResult {
     componentCount: number;
     connectionCount: number;
   };
+  /** Graph, tree and fingerprint details, only when debugging is enabled. */
+  debug?: ValidationDebug;
+}
+
+export type Orientation = 'forward' | 'reverse';
+export type Relation = 'series' | 'parallel';
+
+export type DebugTree =
+  | {
+      type: 'leaf';
+      elementId: string;
+      label: string;
+      token: string;
+      from: string;
+      to: string;
+    }
+  | {
+      type: 'series' | 'parallel';
+      token: string;
+      from: string;
+      to: string;
+      children: DebugTree[];
+    };
+
+export interface CircuitDebug {
+  nodes: Array<{ id: string; terminals: string[] }>;
+  elements: Array<{
+    id: string;
+    label: string;
+    token: string;
+    nodes: [string, string];
+    role: string;
+    polar: boolean;
+    orientation: Orientation | null;
+    inTree: boolean;
+  }>;
+  source: string | null;
+  ports: { plus: string; minus: string } | null;
+  tree: DebugTree | null;
+  fingerprint: string | null;
+  topology: Topology | null;
+}
+
+export interface ComparisonDebug {
+  match: boolean;
+  method: 'tree' | 'partition' | 'none';
+  mapping: Array<{ student: string; reference: string }>;
+  pairs: Array<{
+    a: string;
+    b: string;
+    reference: Relation;
+    student: Relation | null;
+  }>;
+  polarity: Array<{
+    label: string;
+    reference: Orientation;
+    student: Orientation;
+  }>;
+  partialScore: number;
+}
+
+export interface ValidationDebug {
+  student: CircuitDebug;
+  reference: CircuitDebug | null;
+  comparison: ComparisonDebug | null;
 }

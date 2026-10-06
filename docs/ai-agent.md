@@ -6,7 +6,7 @@ The assistant supports students with experiment steps, equipment setup, circuit 
 
 The agent reads lab information and checks the current student workspace. Its visual guidance skill can point to controls, circle equipment or wires, draw an arrow and open learning views when explicitly requested. It cannot place equipment, change wires or settings, mark steps complete, submit attempts, save grades or run an electrical simulation. Students remain in control of those actions. The tutoring policy calls for progressive hints rather than a complete worked experiment or answer sheet.
 
-The instructor reference guide from `dev_hansadee` remains available through **Get Help**. The circuit validation and attempt services from `feature/multi-topology-circuit-validation` supply the same checks used by **Check Progress**. AI implementation changes are confined to `backend/src/ai`, the AI widget/context/overlay, this documentation and minimal context or target metadata in the student dashboard, editor and instructor help dialog. Upstream changes and tests remain owned by their original features.
+The **Get Help** reference dialog has been removed from both lab editors; the assistant is the student's help. The circuit validation and attempt services from `feature/multi-topology-circuit-validation` supply the same checks used by **Check Progress**. AI implementation changes are confined to `backend/src/ai`, the AI widget/context/overlay, this documentation and minimal context or target metadata in the student dashboard, editor and instructor help dialog. Upstream changes and tests remain owned by their original features.
 
 ## Architecture
 
@@ -50,13 +50,13 @@ The global Clerk authentication guard protects the AI endpoint. The AI module im
 
 The browser supplies workspace identities and wire endpoints, not trusted component values, grading rules or instructions. The backend reads equipment labels, configuration, procedures, tolerances and validation rules from the saved lab. It checks that every supplied component belongs to that lab. This preserves the distinction between the student's actual circuit and the instructor's reference circuit.
 
-The selected step is supplied with its full procedure and tolerance fields, subject to documented text limits. The assistant starts with a useful hint when a student is stuck, explains why a step matters and provides a fuller answer when requested. It can direct the student to **Get Help** for the instructor's reference, **Wire Mode** for connections, **Check Progress** for an unsaved check and **Submit** for an actual submission.
+The selected step is supplied with its full procedure and tolerance fields, subject to documented text limits. The assistant starts with a useful hint when a student is stuck, explains why a step matters and provides a fuller answer when requested. It can direct the student to the step list for instructions, **Wire Mode** for connections, **Check Progress** for an unsaved check and **Submit** for an actual submission.
 
 The assistant speaks as a patient teaching helper: natural contractions, plain explanations and acknowledgement of frustration without scripted greetings or unsupported praise. It begins with a direct answer and uses up to three short sections when the question needs them. Troubleshooting focuses on one evidenced issue and a manageable check. Calculations separate inputs, formula and result, with explicit units and provenance. Responses normally stay under 180 words; short questions do not require a fixed template. Visual guidance reasons address the student directly, and guidance-only replies follow the same conversational style without an additional model call.
 
 Assistant messages render paragraphs, restrained headings, emphasis, numbered steps, bullets and formula blocks. All heading levels use the same compact section treatment in the chat. Formulas can scroll horizontally, long text wraps and check metadata appears as small badges beneath the answer. User messages remain literal text. Existing plain-text session history still displays with preserved line breaks. The welcome message, progress text and input prompt use the same teaching tone.
 
-Claims about circuit correctness should use `inspect_workspace`. Rule-based results can describe the supported topology and instructor criteria. Legacy results check equipment, counts and steps; they do not establish electrical correctness. Neither mode supplies real instrument readings. Completed steps are student-reported progress.
+Claims about circuit correctness should use `inspect_workspace`. Every lab is validated with circuit rules (labs without saved rules use the defaults), so results describe the circuit graph, the lab's criteria and the comparison with the instructor's circuit. Validation does not supply real instrument readings, and steps are instructions, not graded progress.
 
 Measurement interpretation uses student-provided readings and the selected step's tolerances, falling back to lab tolerances when appropriate. The model must ask for missing values or incompatible units. Supported calculations are performed by code, while explanations, unit conversion and selection of appropriate inputs remain model responsibilities.
 
@@ -257,3 +257,12 @@ The full frontend type check remains blocked by a pre-existing Zod 4 `required_e
 Recommended manual acceptance after the normal migration and app startup: open a student lab, place and wire equipment, ask for a hint and a setup check, request a calculation and a reading comparison, open **Get Help**, then switch labs and return. Confirm the agent describes current work, separates reference wiring from actual wiring and leaves submission decisions to the student.
 
 For visual guidance, ask where **Get Help** is, request an arrow to **Wire Mode**, ask to open a named visible lab and cancel a navigation proposal with **Escape**. Ask to circle a validator-supported connection issue, then ask the assistant to fix the wiring or click **Submit**. It should explain or highlight while leaving those experiment actions to the student. Verify that scrolling, canvas movement and opening the chat do not let the overlay obscure or intercept normal lab interactions.
+
+## Check Progress feedback
+
+**Check Progress** opens the results dialog with the validator's checks and, at the top, a short AI explanation.
+
+- The editor calls `POST /ai/progress-feedback` alongside the normal validation request. It sends the same body shape as the chat context (`labId`, `currentStepIndex` and the workspace's part identities and wires).
+- The backend validates the workspace again with `inspect_workspace`. The model therefore sees only server-side evidence, never a result supplied by the browser. It makes one model call without tools, using the tutoring policy plus `PROGRESS_FEEDBACK_PROMPT`: a verdict, then the one or two most important issues with a concrete next step, as a hint rather than a full answer.
+- If the assistant is unavailable or not configured, the dialog says so and the checks are still shown. Only the latest check's feedback is displayed.
+- Every Check Progress click makes one model request. Keep this in mind for provider cost and rate limits.

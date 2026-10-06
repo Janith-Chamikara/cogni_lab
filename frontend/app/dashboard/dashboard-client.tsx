@@ -19,10 +19,8 @@ import {
   Clock,
   CheckCircle2,
   Wrench,
-  Trash2,
 } from "lucide-react";
 import { Lab, LabEquipment, LabStats, Module } from "@/lib/types";
-import { deleteLab, getLabStats } from "@/lib/actions";
 import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
 import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { Button } from "@/components/ui/button";
@@ -50,14 +48,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { CreateLabDialog } from "@/components/lab/create-lab-dialog";
 
 type DashboardClientProps = {
@@ -105,9 +95,6 @@ export function DashboardClient({
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false);
-  const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const filteredLabs = labs.filter(
     (lab) =>
@@ -119,34 +106,6 @@ export function DashboardClient({
     setLabs([newLab, ...labs]);
     setStats({ ...stats, totalLabs: stats.totalLabs + 1 });
     setIsCreateOpen(false);
-  };
-
-  const openDeleteDialog = (lab: Lab) => {
-    setDeleteError(null);
-    setLabToDelete(lab);
-  };
-
-  const handleDeleteLab = async () => {
-    if (!labToDelete) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-    const result = await deleteLab(labToDelete.id);
-
-    if (result.error) {
-      setDeleteError(result.error);
-      setIsDeleting(false);
-      return;
-    }
-
-    setLabs((prev) => prev.filter((lab) => lab.id !== labToDelete.id));
-    // The lab's submissions are deleted with it, so reload the stats.
-    const statsResult = await getLabStats();
-    setStats(
-      statsResult.data ?? { ...stats, totalLabs: stats.totalLabs - 1 },
-    );
-    setIsDeleting(false);
-    setLabToDelete(null);
   };
 
   const handleEquipmentCreated = (equipment: LabEquipment) => {
@@ -167,19 +126,6 @@ export function DashboardClient({
         .includes(equipmentSearchQuery.toLowerCase()),
   );
 
-  const completedLabs = labs.filter((lab) => lab.completionStatus === "COMPLETED").length;
-  const inProgressLabs = labs.filter((lab) => lab.completionStatus === "IN_PROGRESS").length;
-  const notStartedLabs = labs.filter((lab) => lab.completionStatus === "NOT_STARTED").length;
-
-  const topModules = modules
-    .map((mod) => ({
-      id: mod.id,
-      name: mod.moduleName,
-      count: mod._count?.labInstances ?? 0,
-    }))
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 3);
-
   if (error) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -193,7 +139,7 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
-      <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
+      <div className="container mx-auto max-w-[96rem] space-y-8 px-6 py-8">
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -453,7 +399,7 @@ export function DashboardClient({
                             </TableCell>
                             <TableCell className="pr-6">
                               <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                <Link href={`/labs/${lab.id}`} data-ai-label={`Open ${lab.labName}`}>
+                                <Link href={`/labs/${lab.id}`}>
                                   <Button
                                     variant="ghost"
                                     size="icon"
@@ -462,7 +408,7 @@ export function DashboardClient({
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </Link>
-                                <DropdownMenu modal={false}>
+                                <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
@@ -477,11 +423,7 @@ export function DashboardClient({
                                     <DropdownMenuItem>
                                       Duplicate
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                      className="text-destructive"
-                                      onSelect={() => openDeleteDialog(lab)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
+                                    <DropdownMenuItem className="text-destructive">
                                       Delete
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -517,7 +459,7 @@ export function DashboardClient({
                     </div>
                   ) : (
                     labs.map((lab) => (
-                      <Link key={lab.id} href={`/labs/${lab.id}`} data-ai-label={`Open ${lab.labName}`}>
+                      <Link key={lab.id} href={`/labs/${lab.id}`}>
                         <Card className="group cursor-pointer transition-all hover:shadow-md">
                           <CardHeader className="pb-2">
                             <div className="flex items-start justify-between">
@@ -685,118 +627,12 @@ export function DashboardClient({
                   Track student performance and lab usage
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Total Labs
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold">{stats.totalLabs}</p>
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Active Labs
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold">{stats.activeLabs}</p>
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Completed Labs
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold">{completedLabs}</p>
-                  </div>
-
-                  <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Student Submissions
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold">{stats.totalProgress}</p>
-                  </div>
-                </div>
-
-                <div className="mt-8 grid gap-4 lg:grid-cols-2">
-                  <Card className="border border-border bg-card">
-                    <CardHeader>
-                      <CardTitle>Lab Status Overview</CardTitle>
-                      <CardDescription>
-                        Current lab progress across all active modules.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
-                          <div>
-                            <p className="text-sm font-medium">In Progress</p>
-                            <p className="text-xs text-muted-foreground">
-                              Labs currently being worked on
-                            </p>
-                          </div>
-                          <span className="text-xl font-semibold text-amber-600">
-                            {inProgressLabs}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
-                          <div>
-                            <p className="text-sm font-medium">Not Started</p>
-                            <p className="text-xs text-muted-foreground">
-                              Labs waiting for student activity
-                            </p>
-                          </div>
-                          <span className="text-xl font-semibold text-slate-700">
-                            {notStartedLabs}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between rounded-xl bg-muted/10 p-4">
-                          <div>
-                            <p className="text-sm font-medium">Completed</p>
-                            <p className="text-xs text-muted-foreground">
-                              Labs finished by students
-                            </p>
-                          </div>
-                          <span className="text-xl font-semibold text-emerald-600">
-                            {completedLabs}
-                          </span>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card className="border border-border bg-card">
-                    <CardHeader>
-                      <CardTitle>Top Modules</CardTitle>
-                      <CardDescription>
-                        Most active modules by number of labs.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {topModules.length > 0 ? (
-                          topModules.map((module) => (
-                            <div
-                              key={module.id}
-                              className="flex items-center justify-between rounded-xl bg-muted/10 p-4"
-                            >
-                              <div>
-                                <p className="font-medium">{module.name}</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {module.count} lab{module.count === 1 ? "" : "s"}
-                                </p>
-                              </div>
-                              <Badge variant="secondary">{module.count}</Badge>
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No module data available.
-                          </p>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
+              <CardContent className="flex min-h-[300px] items-center justify-center">
+                <div className="text-center">
+                  <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground/30" />
+                  <p className="mt-4 text-muted-foreground">
+                    Analytics dashboard coming soon
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -818,44 +654,6 @@ export function DashboardClient({
         onOpenChange={setIsCreateEquipmentOpen}
         onCreated={handleEquipmentCreated}
       />
-
-      {/* Delete Lab Confirmation */}
-      <Dialog
-        open={!!labToDelete}
-        onOpenChange={(open) => {
-          if (!open && !isDeleting) setLabToDelete(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete laboratory?</DialogTitle>
-            <DialogDescription>
-              &quot;{labToDelete?.labName}&quot; will be permanently deleted,
-              together with its equipment, wiring, steps and all student
-              submissions. This cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError && (
-            <p className="text-sm text-destructive">{deleteError}</p>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setLabToDelete(null)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeleteLab}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

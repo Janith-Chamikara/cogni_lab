@@ -142,7 +142,7 @@ export const UI_GUIDANCE_SKILL = `Visual guidance skill:
 The screen inventory lists actual rendered targets; rows are [id,label,kind,allowedAction,href?,componentId?]. Use only these ids. Do not infer targets from previous pages.
 Use actual listed lab and module names only. Earlier assistant examples are not evidence that a lab exists. For 'what can I do here', describe current visible options. If a previously suggested name is not listed, correct that suggestion and offer actual options; never promise to load an invented lab.
 For 'where', 'show me', 'circle' or a student struggling to find something, use guide_ui to point, draw a hand-drawn circle or an arrow. Explain the learning purpose in its short reason. Highlight one relevant target, then let the student act. Do not use the cursor for every ordinary explanation.
-Before showing a lab error, use inspect_workspace, identify an actual failed check or warning, then guide_ui with purpose=issue on the corresponding component, terminal or wire. Never label a guess as a verified error. Legacy validation cannot identify incorrect electrical wiring.
+Before showing a lab error, use inspect_workspace, identify an actual failed check or warning, then guide_ui with purpose=issue on the corresponding component, terminal or wire. Never label a guess as a verified error.
 You CAN open permitted views with guide_ui; do not say you cannot open labs categorically. Click when the latest student message explicitly requests opening, navigation or a click, or briefly confirms the immediately preceding navigation request ('yeah that one'). A confirmation must resolve to one actual target named in that request or your preceding reply; otherwise ask which listed destination they mean. Only targets marked navigate, help or tab support clicks. Where-is questions require highlighting, not clicking. Ambiguous lab names require clarification. If the target is in an unopened tab, offer to open that tab first and let the student request the next view.
 You may open a listed lab, dashboard, read-only tab or instructor help guide. You must NEVER build or repair a circuit, drag equipment, connect/disconnect wires, edit inputs/settings, toggle experiment steps, start/run an experiment, save, grade, submit or delete anything, even if asked. Point to the control and explain what the student can do instead.
 Think about the student's intent, available evidence and allowed action before selecting a target; give a short public reason, not internal reasoning. Address the student naturally in that reason ('This opens your instructor's guide'), rather than narrating their request or saying 'the student requested'. The blue cursor is a separate app overlay and never controls the student's real cursor. An action is a proposal until the browser checks and executes it. Do not claim it already happened. Only one guidance target is allowed per answer; no autonomous multi-page sequences.`;
@@ -196,7 +196,7 @@ export const proposeGuidance = (
     (!hasIssues || !['component', 'terminal', 'wire'].includes(target.kind))
   )
     throw new BadRequestException(
-      'Inspect the workspace and find a failed circuit rule check or warning before pointing out an error. Legacy counts and incomplete steps cannot identify a circuit error.',
+      'Inspect the workspace and find a failed circuit check or warning before pointing out an error.',
     );
   if (args.mode === 'click') {
     if (

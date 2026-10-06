@@ -5,7 +5,7 @@ import { Facebook, Instagram, Youtube, Linkedin } from "lucide-react";
 export function Footer() {
   return (
     <footer className="w-full border-t border-border bg-background">
-      <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className="mx-auto max-w-[96rem] px-4 py-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
           {/* Left Section - Logo and Copyright */}
           <div className="flex flex-col items-start justify-center gap-4 h-full relative">

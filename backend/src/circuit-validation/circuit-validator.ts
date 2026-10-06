@@ -1,13 +1,20 @@
 import { DEFAULT_CHECK_WEIGHTS } from './circuit-rules';
-import { parseCircuit, type ParsedElement } from './circuit-parser';
-import { formatValue, getComponentSpec } from './component-registry';
 import {
-  classifyTopology,
-  equivalentValue,
-  reduceNetwork,
-  type NetworkEdge,
-  type ReductionTree,
-} from './topology';
+  analyzeCircuit,
+  inResistanceRange,
+  isInstrumentElement,
+  isTopologyAllowed,
+  isSourceElement,
+  roleOf,
+} from './circuit-analysis';
+import { buildCircuitDebug } from './circuit-debug';
+import { formatValue } from './component-registry';
+import {
+  compareToReference,
+  comparisonDebug,
+  type ReferenceComparison,
+} from './reference-compare';
+import { leafParentType } from './topology';
 import type {
   CheckKey,
   CheckResult,
@@ -15,12 +22,12 @@ import type {
   CircuitRules,
   CircuitState,
   StepProgress,
-  Topology,
   ValidationResult,
 } from './types';
 
 // Validation pipeline:
-//   student circuit -> parser (nodes/elements) -> checks against lab rules
+//   student circuit -> analysis (nodes, elements, series/parallel tree)
+//   -> checks against lab rules and the instructor's circuit
 //   -> structured result with score.
 // Only the final circuit state is evaluated; never the order of actions.
 
@@ -31,6 +38,10 @@ export interface ValidateCircuitInput {
   circuit: CircuitState;
   rules: CircuitRules;
   steps?: StepProgress;
+  /** The instructor's wired circuit, compared when rules allow it. */
+  reference?: CircuitState | null;
+  /** Include graph, tree and fingerprint details in the result. */
+  debug?: boolean;
 }
 
 const withinTolerance = (actual: number, expected: number, percent: number) =>
@@ -47,85 +58,13 @@ const describe = (component: CircuitComponent) => {
 
 const round = (value: number) => Math.round(value * 100) / 100;
 
-const isTopologyAllowed = (detected: Topology, rules: CircuitRules) => {
-  if (rules.allowedTopologies.includes('any') || detected === 'single')
-    return true;
-  if (detected === 'complex') return false;
-  return rules.allowedTopologies.includes(detected);
-};
-
-/** Group elements that are electrically connected to each other. */
-const groupConnectedElements = (elements: ParsedElement[]) => {
-  const parent = elements.map((_, i) => i);
-  const find = (i: number): number =>
-    parent[i] === i ? i : (parent[i] = find(parent[i]));
-  const firstOnNode = new Map<string, number>();
-
-  elements.forEach((element, index) => {
-    for (const node of element.nodes) {
-      const other = firstOnNode.get(node);
-      if (other === undefined) firstOnNode.set(node, index);
-      else parent[find(index)] = find(other);
-    }
-  });
-
-  const groups = new Map<number, number[]>();
-  elements.forEach((_, index) => {
-    const root = find(index);
-    groups.set(root, [...(groups.get(root) ?? []), index]);
-  });
-  return [...groups.values()];
-};
-
-/** Remove elements hanging off the network by a dead-end node. */
-const findDanglingElements = (
-  elements: ParsedElement[],
-  ports: Set<string>,
-): ParsedElement[] => {
-  let remaining = elements.filter((e) => e.nodes[0] !== e.nodes[1]);
-  const dangling: ParsedElement[] = [];
-  let changed = true;
-  while (changed) {
-    changed = false;
-    const degree = new Map<string, number>();
-    for (const e of remaining) {
-      for (const node of e.nodes) degree.set(node, (degree.get(node) ?? 0) + 1);
-    }
-    const dead = remaining.filter((e) =>
-      e.nodes.some((node) => !ports.has(node) && degree.get(node) === 1),
-    );
-    if (dead.length > 0) {
-      dangling.push(...dead);
-      remaining = remaining.filter((e) => !dead.includes(e));
-      changed = true;
-    }
-  }
-  return dangling;
-};
-
-const areNodesConnected = (elements: ParsedElement[], a: string, b: string) => {
-  const visited = new Set([a]);
-  const queue = [a];
-  while (queue.length > 0) {
-    const node = queue.shift()!;
-    if (node === b) return true;
-    for (const e of elements) {
-      const [u, v] = e.nodes;
-      const next = u === node ? v : v === node ? u : null;
-      if (next && !visited.has(next)) {
-        visited.add(next);
-        queue.push(next);
-      }
-    }
-  }
-  return false;
-};
-
 export const validateCircuit = ({
   required,
   circuit,
   rules,
   steps,
+  reference,
+  debug,
 }: ValidateCircuitInput): ValidationResult => {
   const weights = { ...DEFAULT_CHECK_WEIGHTS, ...rules.weights };
   const checks: Partial<Record<string, CheckResult>> = {};
@@ -211,41 +150,26 @@ export const validateCircuit = ({
     warnings.push(...extraMessages);
   }
 
-  // ---- Parse the circuit into an electrical graph ----------------------
-  const parsed = parseCircuit(circuit);
-  const { elements } = parsed;
-  const isSource = (e: ParsedElement) =>
-    !!getComponentSpec(e.component.kind).isSource;
-  const isInstrument = (e: ParsedElement) =>
-    !!getComponentSpec(e.component.kind).isInstrument;
-  const isShorted = (e: ParsedElement) => e.nodes[0] === e.nodes[1];
-
-  // Main circuit: the group containing a power source, otherwise the largest.
-  const groups = groupConnectedElements(elements).sort(
-    (a, b) =>
-      Number(b.some((i) => isSource(elements[i]))) -
-        Number(a.some((i) => isSource(elements[i]))) ||
-      b.length - a.length ||
-      a[0] - b[0],
-  );
-  const mainGroup = (groups[0] ?? []).map((i) => elements[i]);
-  const disconnected = elements.filter((e) => !mainGroup.includes(e));
-  const sources = mainGroup.filter(isSource);
-  const hasSource = sources.length > 0;
+  // ---- Analyse the circuit as an electrical graph ----------------------
+  const analysis = analyzeCircuit(circuit, rules);
+  const {
+    parsed,
+    elements,
+    disconnected,
+    portSource,
+    hasSource,
+    openTerminals,
+    allowedOpenTerminals,
+    dangling,
+    isComplete,
+    full,
+  } = analysis;
 
   // ---- Connection validation -------------------------------------------
-  const openTerminals = mainGroup.flatMap((e) =>
-    e.wireCounts
-      .map((count, index) => ({ element: e, index, count }))
-      .filter((t) => t.count === 0),
-  );
-  // Without a power source, the two free ends of the network are its ports.
-  const allowedOpenTerminals = hasSource ? 0 : 2;
-
   const connectionIssues = [...new Set(parsed.invalidWires)];
-  const disconnectedMessages = disconnected.map(
-    (e) => `${e.component.label} is not connected to the circuit`,
-  );
+  const disconnectedMessages = [
+    ...new Set(disconnected.map((e) => e.component.label)),
+  ].map((label) => `${label} is not connected to the circuit`);
   if (rules.requireAllConnected) connectionIssues.push(...disconnectedMessages);
   else warnings.push(...disconnectedMessages);
 
@@ -253,7 +177,7 @@ export const validateCircuit = ({
     connectionIssues.push(
       ...openTerminals.map(
         (t) =>
-          `${t.element.component.label} ${t.element.terminals[t.index]} is not connected`,
+          `${t.element.component.label} terminal ${t.element.terminals[t.index].label} is not connected`,
       ),
     );
   }
@@ -273,13 +197,11 @@ export const validateCircuit = ({
   );
 
   // ---- Short circuits ----------------------------------------------------
-  const shortIssues = mainGroup
-    .filter(isShorted)
-    .map((e) =>
-      isSource(e)
-        ? `Short circuit: the terminals of ${e.component.label} are connected directly`
-        : `${e.component.label} is short-circuited (both terminals are connected together)`,
-    );
+  const shortIssues = analysis.shorted.map((e) =>
+    isSourceElement(e)
+      ? `Short circuit: the terminals of ${e.component.label} are connected directly`
+      : `${e.label} is short-circuited (both terminals are connected together)`,
+  );
   if (rules.forbidShortCircuit) {
     addCheck(
       'shortCircuit',
@@ -294,86 +216,10 @@ export const validateCircuit = ({
     warnings.push(...shortIssues);
   }
 
-  // ---- Network between the ports ----------------------------------------
-  const portSource = sources[0];
-  const network = mainGroup.filter(
-    (e) => e !== portSource && !isInstrument(e) && !isShorted(e),
-  );
-  const edges: NetworkEdge[] = network.map((e) => ({
-    id: e.component.id,
-    u: e.nodes[0],
-    v: e.nodes[1],
-  }));
-  const resistanceOf = (id: string) => {
-    const element = network.find((e) => e.component.id === id);
-    return element?.component.kind === 'resistor'
-      ? (element.component.value ?? null)
-      : null;
-  };
-  const inResistanceRange = (value: number | null) => {
-    const range = rules.equivalentResistance;
-    if (!range) return true;
-    if (value === null) return false;
-    return (
-      (range.min == null || value >= range.min - 1e-9) &&
-      (range.max == null || value <= range.max + 1e-9)
-    );
-  };
-
-  let ports: [string, string] | null = null;
-  let tree: ReductionTree | null = null;
-
-  if (portSource) {
-    if (!isShorted(portSource)) ports = portSource.nodes;
-  } else if (openTerminals.length === 2) {
-    const [a, b] = openTerminals;
-    ports = [a.element.nodes[a.index], b.element.nodes[b.index]];
-  } else if (openTerminals.length < 2 && network.length > 0) {
-    // Passive network without a source and fewer than two free ends, e.g.
-    // R1 || R2 || R3 (no free ends) or R1 + (R2 || R3) (one free end).
-    // Free ends must be ports; search the remaining port, preferring a pair
-    // that gives an allowed topology.
-    const fixed = openTerminals.map((t) => t.element.nodes[t.index]);
-    const nodes = [...new Set(network.flatMap((e) => e.nodes))].sort();
-    const pairs: Array<[string, string]> =
-      fixed.length === 1
-        ? nodes.filter((n) => n !== fixed[0]).map((n) => [fixed[0], n])
-        : nodes.flatMap((a, i) =>
-            nodes.slice(i + 1).map((b): [string, string] => [a, b]),
-          );
-
-    let fallback: { ports: [string, string]; tree: ReductionTree } | null =
-      null;
-    for (const pair of pairs) {
-      const candidate = reduceNetwork(edges, pair[0], pair[1]);
-      if (!candidate) continue;
-      fallback ??= { ports: pair, tree: candidate };
-      if (
-        isTopologyAllowed(classifyTopology(candidate), rules) &&
-        inResistanceRange(equivalentValue(candidate, resistanceOf))
-      ) {
-        ports = pair;
-        tree = candidate;
-        break;
-      }
-    }
-    if (!tree && fallback) ({ ports, tree } = fallback);
-  }
-
-  if (ports && !tree) tree = reduceNetwork(edges, ports[0], ports[1]);
-
   // ---- Completeness / closed loop ---------------------------------------
-  const dangling = ports ? findDanglingElements(network, new Set(ports)) : [];
   const completeIssues = dangling.map(
-    (e) =>
-      `${e.component.label} is on an open branch (current cannot flow through it)`,
+    (e) => `${e.label} is on an open branch (current cannot flow through it)`,
   );
-  const isComplete =
-    network.length > 0 &&
-    ports !== null &&
-    disconnected.length === 0 &&
-    openTerminals.length <= allowedOpenTerminals &&
-    dangling.length === 0;
   addCheck(
     'circuitComplete',
     'Circuit complete',
@@ -385,26 +231,18 @@ export const validateCircuit = ({
   );
 
   if (hasSource && rules.requireClosedCircuit) {
-    const closed =
-      ports !== null &&
-      network.length > 0 &&
-      areNodesConnected(network, ports[0], ports[1]);
     addCheck(
       'circuitClosed',
       'Circuit closed',
-      closed,
-      closed
+      analysis.isClosed,
+      analysis.isClosed
         ? 'Circuit is closed'
-        : `Circuit is open: there is no complete path between the terminals of ${portSource.component.label}`,
+        : `Circuit is open: there is no complete path between the terminals of ${portSource!.component.label}`,
     );
   }
 
   // ---- Topology ----------------------------------------------------------
-  const detected: Topology | null = tree
-    ? classifyTopology(tree)
-    : isComplete
-      ? 'complex'
-      : null;
+  const detected = analysis.topology;
   const allowedText = rules.allowedTopologies.join(', ');
   addCheck(
     'topology',
@@ -420,13 +258,11 @@ export const validateCircuit = ({
   );
 
   // ---- Electrical validation ---------------------------------------------
-  const equivalentResistance = tree
-    ? equivalentValue(tree, resistanceOf)
-    : null;
+  const equivalentResistance = analysis.equivalentResistance;
   if (rules.equivalentResistance) {
     const { min, max } = rules.equivalentResistance;
     const rangeText = `${min ?? 0}–${max ?? '∞'} Ω`;
-    const passed = inResistanceRange(equivalentResistance);
+    const passed = inResistanceRange(equivalentResistance, rules);
     addCheck(
       'equivalentResistance',
       'Equivalent resistance',
@@ -436,6 +272,89 @@ export const validateCircuit = ({
         : `Equivalent resistance is ${round(equivalentResistance)} Ω (required ${rangeText})`,
       [],
       equivalentResistance === null ? null : round(equivalentResistance),
+    );
+  }
+
+  // ---- Instructor's circuit (reference) ---------------------------------
+  const includeValues = rules.checkComponentValues;
+  const referenceAnalysis =
+    rules.compareToReference && reference && reference.wires.length > 0
+      ? analyzeCircuit(reference, rules)
+      : null;
+  let comparison: ReferenceComparison | null = null;
+  if (referenceAnalysis) {
+    comparison = compareToReference(referenceAnalysis, analysis, includeValues);
+    addCheck(
+      'matchesReference',
+      'Matches the instructor’s circuit',
+      comparison.match,
+      comparison.match
+        ? 'Your circuit matches the instructor’s circuit'
+        : 'Your circuit differs from the instructor’s circuit',
+      comparison.messages,
+    );
+    if (!comparison.match && comparison.partialScore > 0) {
+      checks.matchesReference!.partial = comparison.partialScore;
+    }
+  }
+
+  // ---- Polarity ------------------------------------------------------------
+  // Polar parts (LEDs, diodes, meters) must let current in at the right
+  // terminal: as in the instructor's circuit, or forward when there is none.
+  const polar = full.elements.filter((e) => e.branch.polar);
+  if (polar.length > 0 && full.orientation) {
+    const polarityIssues: string[] = [];
+    for (const e of polar) {
+      const actual = full.orientation.get(e.id);
+      const ref = comparison?.mapping.get(e.id);
+      const expected =
+        (ref && referenceAnalysis?.full.orientation?.get(ref.id)) ?? 'forward';
+      if (!actual || actual === expected) continue;
+      polarityIssues.push(
+        expected === 'forward'
+          ? `${e.label} is reversed: its ${e.terminals[0].name} must face the + side of the supply`
+          : `${e.label} is the other way round in the instructor’s circuit`,
+      );
+    }
+    addCheck(
+      'polarity',
+      'Polarity',
+      polarityIssues.length === 0,
+      polarityIssues.length === 0
+        ? 'All polarised parts face the right way'
+        : 'Some parts are connected the wrong way round',
+      polarityIssues,
+    );
+  }
+
+  // ---- Instruments ---------------------------------------------------------
+  // Voltmeters go across a part (parallel); ammeters go in series.
+  const meters = full.elements.filter(
+    (e) => isInstrumentElement(e) && roleOf(e) !== 'load',
+  );
+  if (meters.length > 0 && full.ancestors) {
+    const instrumentIssues: string[] = [];
+    for (const e of meters) {
+      const parent = leafParentType(full.ancestors, e.id);
+      if (roleOf(e) === 'voltmeter' && parent === 'series') {
+        instrumentIssues.push(
+          `${e.label} should be connected across a component (in parallel), but it is in series`,
+        );
+      }
+      if (roleOf(e) === 'ammeter' && parent !== 'series') {
+        instrumentIssues.push(
+          `${e.label} should be in series, but it is connected across ${parent ? 'another part' : 'the supply'}, which short-circuits it`,
+        );
+      }
+    }
+    addCheck(
+      'instruments',
+      'Instrument placement',
+      instrumentIssues.length === 0,
+      instrumentIssues.length === 0
+        ? 'Instruments are connected correctly'
+        : 'Some instruments are connected incorrectly',
+      instrumentIssues,
     );
   }
 
@@ -457,9 +376,10 @@ export const validateCircuit = ({
     (c): c is CheckResult => c !== undefined,
   );
   const totalWeight = all.reduce((sum, c) => sum + c.weight, 0);
-  const earned = all
-    .filter((c) => c.passed)
-    .reduce((sum, c) => sum + c.weight, 0);
+  const earned = all.reduce(
+    (sum, c) => sum + (c.passed ? c.weight : c.weight * (c.partial ?? 0)),
+    0,
+  );
 
   return {
     mode: 'rules',
@@ -475,5 +395,17 @@ export const validateCircuit = ({
       componentCount: circuit.components.length,
       connectionCount: parsed.wireCount,
     },
+    ...(debug && {
+      debug: {
+        student: buildCircuitDebug(analysis, includeValues),
+        reference: referenceAnalysis
+          ? buildCircuitDebug(referenceAnalysis, includeValues)
+          : null,
+        comparison:
+          comparison && referenceAnalysis
+            ? comparisonDebug(comparison, analysis, referenceAnalysis)
+            : null,
+      },
+    }),
   };
 };

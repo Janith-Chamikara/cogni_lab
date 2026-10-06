@@ -6,12 +6,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client';
 import { StudentCircuitDto } from './dto/lab.dto';
+import type { LabActor } from './lab.service';
 import {
+  buildReferenceCircuit,
   buildRequiredComponents,
   buildStudentCircuit,
+  DEFAULT_CIRCUIT_RULES,
   readStoredCircuitRules,
   validateCircuit,
-  validateLegacyCircuit,
   type StudentCircuitInput,
   type ValidationResult,
 } from '../circuit-validation';
@@ -23,13 +25,16 @@ type AttemptSummary = {
   submittedAt: Date;
 };
 
-/** Best attempt: highest score, then passed, then the earliest submission. */
+/**
+ * Best attempt: a validated (passed) one first, then the most checks
+ * passed (internal score), then the earliest submission.
+ */
 export const pickBestAttempt = <T extends AttemptSummary>(attempts: T[]) =>
   attempts.reduce<T | null>((best, attempt) => {
     if (!best) return attempt;
+    if (attempt.passed !== best.passed) return attempt.passed ? attempt : best;
     if (attempt.score !== best.score)
       return attempt.score > best.score ? attempt : best;
-    if (attempt.passed !== best.passed) return attempt.passed ? attempt : best;
     return attempt.submittedAt < best.submittedAt ? attempt : best;
   }, null);
 
@@ -39,6 +44,16 @@ const asArray = (value: unknown): unknown[] =>
   Array.isArray(value) ? value : [];
 const asObject = (value: unknown) =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+
+/**
+ * Debug details (graph, tree, fingerprints) reveal the instructor's circuit,
+ * so they are only returned to instructors and admins, or to everyone when
+ * CIRCUIT_DEBUG=true is set for local development.
+ */
+export const canDebugCircuits = (actor?: LabActor | null) =>
+  process.env.CIRCUIT_DEBUG === 'true' ||
+  !!actor?.isInstructor ||
+  !!actor?.isAdmin;
 
 @Injectable()
 export class LabAttemptService {
@@ -97,8 +112,14 @@ export class LabAttemptService {
       where: { id: labId },
       include: {
         labEquipments: { include: { equipment: true } },
-        experimentSteps: { select: { id: true } },
-        _count: { select: { wireConnections: true } },
+        wireConnections: {
+          select: {
+            sourceEquipmentId: true,
+            targetEquipmentId: true,
+            sourceHandle: true,
+            targetHandle: true,
+          },
+        },
       },
     });
 
@@ -112,52 +133,45 @@ export class LabAttemptService {
   private evaluate(
     lab: Awaited<ReturnType<LabAttemptService['loadLab']>>,
     circuit: StudentCircuitInput,
-    completedStepIds: string[],
+    debug = false,
   ): ValidationResult {
-    const stepIds = new Set(lab.experimentSteps.map((s) => s.id));
-    const steps = {
-      total: stepIds.size,
-      completed: new Set(completedStepIds.filter((id) => stepIds.has(id))).size,
-    };
+    // Experiment steps are instructions only. Students no longer tick them
+    // off, so they are not graded; the circuit itself is.
 
-    const rules = readStoredCircuitRules(lab.circuitRulesJson);
-
-    if (!rules) {
-      return validateLegacyCircuit({
-        expectedEquipmentIds: lab.labEquipments.map((p) => p.equipmentId),
-        equipmentNames: Object.fromEntries(
-          lab.labEquipments.map((p) => [
-            p.equipmentId,
-            p.equipment.equipmentName,
-          ]),
-        ),
-        expectedConnectionCount: lab._count.wireConnections,
-        placedEquipmentIds: circuit.components.map((c) => c.equipmentId),
-        connectionCount: circuit.connections.length,
-        steps,
-      });
-    }
+    // Every lab is validated against circuit rules; labs without saved rules
+    // use the defaults (and the instructor's wired circuit, if any).
+    const rules =
+      readStoredCircuitRules(lab.circuitRulesJson) ?? DEFAULT_CIRCUIT_RULES;
+    const reference = buildReferenceCircuit(
+      lab.labEquipments,
+      lab.wireConnections,
+    );
 
     return validateCircuit({
       required: buildRequiredComponents(lab.labEquipments),
       circuit: buildStudentCircuit(lab.labEquipments, circuit),
       rules,
-      steps,
+      reference,
+      debug,
     });
   }
 
-  /** Check the circuit without saving (the student's "Check Progress"). */
-  async validate(labId: string, body: StudentCircuitDto) {
+  /**
+   * Check the circuit without saving (the student's "Check Progress").
+   * `debug: true` in the body adds graph details for permitted actors.
+   */
+  async validate(labId: string, body: StudentCircuitDto, actor?: LabActor) {
     const lab = await this.loadLab(labId);
-    const { circuit, completedStepIds } = this.sanitize(body);
-    return this.evaluate(lab, circuit, completedStepIds);
+    const { circuit } = this.sanitize(body);
+    const debug = asObject(body).debug === true && canDebugCircuits(actor);
+    return this.evaluate(lab, circuit, debug);
   }
 
   /** Validate and store a submission. Every submit creates a new attempt. */
   async submit(labId: string, userId: string, body: StudentCircuitDto) {
     const lab = await this.loadLab(labId);
     const { circuit, completedStepIds, actionLog } = this.sanitize(body);
-    const result = this.evaluate(lab, circuit, completedStepIds);
+    const result = this.evaluate(lab, circuit);
 
     const attempt = await this.prisma.labAttempt.create({
       data: {
@@ -216,7 +230,7 @@ export class LabAttemptService {
 
   /** The student's own attempts for a lab, newest first, plus the best one. */
   async findMine(labId: string, userId: string) {
-    const attempts = await this.prisma.labAttempt.findMany({
+    const rows = await this.prisma.labAttempt.findMany({
       where: { labId, userId },
       orderBy: { submittedAt: 'desc' },
       select: {
@@ -225,10 +239,30 @@ export class LabAttemptService {
         passed: true,
         validationMode: true,
         validationResultJson: true,
+        circuitStateJson: true,
         submittedAt: true,
       },
     });
 
-    return { attempts, bestAttempt: pickBestAttempt(attempts) };
+    // Only the latest submission's circuit is returned, so the editor can
+    // show what the student submitted when they come back.
+    const attempts = rows.map((row) => {
+      const attempt: Partial<typeof row> = { ...row };
+      delete attempt.circuitStateJson;
+      return attempt as Omit<typeof row, 'circuitStateJson'>;
+    });
+    const latest = rows[0];
+    return {
+      attempts,
+      bestAttempt: pickBestAttempt(attempts),
+      latestSubmission: latest
+        ? {
+            attemptId: latest.id,
+            submittedAt: latest.submittedAt,
+            passed: latest.passed,
+            circuit: latest.circuitStateJson,
+          }
+        : null,
+    };
   }
 }

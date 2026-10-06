@@ -1,21 +1,43 @@
-import { getComponentSpec, handleToTerminal } from './component-registry';
-import type { CircuitComponent, CircuitState } from './types';
+import {
+  getComponentSpec,
+  handleToTerminalIndex,
+  resolveTerminals,
+  type BranchSpec,
+} from './component-registry';
+import type { CircuitComponent, CircuitState, TerminalSpec } from './types';
 
-// Converts the student's final circuit (components + wires) into an
-// electrical graph: terminals joined by wires collapse into nodes, and each
-// two-terminal component becomes an element between two nodes. The order in
-// which wires were drawn does not affect the result.
+// Converts a circuit (components + wires) into an electrical graph:
+// terminals joined by wires collapse into nodes, and each branch of a
+// component becomes an element between two nodes. The order in which wires
+// were drawn does not affect the result.
 
 export interface ParsedElement {
+  /** Component id, plus ":branch" for components with several branches. */
+  id: string;
+  /** Component label, plus the branch for components with several branches. */
+  label: string;
   component: CircuitComponent;
-  terminals: [string, string];
+  branch: BranchSpec;
+  /** For polar branches, current must enter at terminals[0]. */
+  terminals: [TerminalSpec, TerminalSpec];
   nodes: [string, string];
   /** Number of wires attached to each terminal. */
   wireCounts: [number, number];
+  /** Value carried by this branch (e.g. part of a potentiometer). */
+  value: number | null;
+}
+
+export interface ParsedTerminal {
+  componentId: string;
+  /** e.g. "V1.+" */
+  label: string;
+  node: string;
+  wireCount: number;
 }
 
 export interface ParsedCircuit {
   elements: ParsedElement[];
+  terminals: ParsedTerminal[];
   invalidWires: string[];
   wireCount: number;
 }
@@ -28,6 +50,7 @@ class UnionFind {
   }
 
   find(key: string): string {
+    this.add(key);
     let root = key;
     while (this.parent.get(root) !== root) root = this.parent.get(root)!;
     // Path compression
@@ -50,18 +73,22 @@ class UnionFind {
   }
 }
 
+export { UnionFind };
+
 const terminalKey = (componentId: string, terminal: string) =>
   `${componentId}.${terminal}`;
 
 export const parseCircuit = (state: CircuitState): ParsedCircuit => {
   const uf = new UnionFind();
   const componentsById = new Map(state.components.map((c) => [c.id, c]));
+  const terminalsOf = (component: CircuitComponent) =>
+    resolveTerminals(component.kind, component.terminals);
   const wireCounts = new Map<string, number>();
   const invalidWires: string[] = [];
 
   for (const component of state.components) {
-    for (const terminal of getComponentSpec(component.kind).terminals) {
-      uf.add(terminalKey(component.id, terminal));
+    for (const terminal of terminalsOf(component)) {
+      uf.add(terminalKey(component.id, terminal.id));
     }
   }
 
@@ -73,14 +100,15 @@ export const parseCircuit = (state: CircuitState): ParsedCircuit => {
       );
       return null;
     }
-    const terminal = handleToTerminal(component.kind, end.handle);
-    if (!terminal) {
+    const terminals = terminalsOf(component);
+    const index = handleToTerminalIndex(terminals, end.handle);
+    if (index === null || !terminals[index]) {
       invalidWires.push(
         `A wire on ${component.label} is attached to an unknown terminal`,
       );
       return null;
     }
-    return terminalKey(component.id, terminal);
+    return terminalKey(component.id, terminals[index].id);
   };
 
   let wireCount = 0;
@@ -94,16 +122,50 @@ export const parseCircuit = (state: CircuitState): ParsedCircuit => {
     wireCount++;
   }
 
-  const elements: ParsedElement[] = state.components.map((component) => {
-    const terminals = getComponentSpec(component.kind).terminals;
-    const keys = terminals.map((t) => terminalKey(component.id, t));
-    return {
-      component,
-      terminals,
-      nodes: [uf.find(keys[0]), uf.find(keys[1])],
-      wireCounts: [wireCounts.get(keys[0]) ?? 0, wireCounts.get(keys[1]) ?? 0],
-    };
-  });
+  const elements: ParsedElement[] = [];
+  const terminals: ParsedTerminal[] = [];
 
-  return { elements, invalidWires, wireCount };
+  for (const component of state.components) {
+    const spec = getComponentSpec(component.kind);
+    const specTerminals = terminalsOf(component);
+    const keys = specTerminals.map((t) => terminalKey(component.id, t.id));
+    const counts = keys.map((key) => wireCounts.get(key) ?? 0);
+
+    specTerminals.forEach((terminal, index) =>
+      terminals.push({
+        componentId: component.id,
+        label: `${component.label}.${terminal.label}`,
+        node: uf.find(keys[index]),
+        wireCount: counts[index],
+      }),
+    );
+
+    const branchIds = spec.pickBranches
+      ? spec.pickBranches(counts.map((count) => count > 0))
+      : spec.branches.map((b) => b.id);
+    const multiBranch = spec.branches.length > 1;
+
+    for (const branch of spec.branches) {
+      if (!branchIds.includes(branch.id)) continue;
+      const [a, b] = branch.between;
+      const share = branch.valueShare?.(component.params ?? {}) ?? 1;
+      elements.push({
+        id: multiBranch ? `${component.id}:${branch.id}` : component.id,
+        label: multiBranch
+          ? `${component.label} (${specTerminals[a].label}–${specTerminals[b].label})`
+          : component.label,
+        component,
+        branch,
+        terminals: [specTerminals[a], specTerminals[b]],
+        nodes: [uf.find(keys[a]), uf.find(keys[b])],
+        wireCounts: [counts[a], counts[b]],
+        value:
+          component.value === null || component.value === undefined
+            ? null
+            : component.value * share,
+      });
+    }
+  }
+
+  return { elements, terminals, invalidWires, wireCount };
 };

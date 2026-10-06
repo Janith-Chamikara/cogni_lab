@@ -1,10 +1,13 @@
 import {
   getComponentSpec,
+  readTerminalOverride,
   resolveComponentKind,
+  resolveComponentParams,
   resolveComponentValue,
+  resolveTerminals,
 } from './component-registry';
 import { asRecord } from './circuit-rules';
-import type { CircuitComponent, CircuitState } from './types';
+import type { CircuitComponent, CircuitState, TerminalSpec } from './types';
 
 // Converts the project's existing data shapes (LabInstanceEquipment
 // placements, WireConnection-style wires) into validation engine inputs.
@@ -18,6 +21,14 @@ export interface LabPlacementLike {
     equipmentType: string;
     defaultConfigJson?: unknown;
   } | null;
+}
+
+/** A wire saved by the instructor (WireConnection rows). */
+export interface LabWireLike {
+  sourceEquipmentId: string;
+  targetEquipmentId: string;
+  sourceHandle?: string | null;
+  targetHandle?: string | null;
 }
 
 /** Student circuit as sent by the student editor. */
@@ -47,6 +58,10 @@ const describePlacement = (placement: LabPlacementLike) => {
   return {
     kind,
     value: resolveComponentValue(kind, config, defaults),
+    params: resolveComponentParams(kind, config, defaults),
+    terminals:
+      readTerminalOverride(kind, config) ??
+      readTerminalOverride(kind, defaults),
     name:
       typeof config?.name === 'string' && config.name.trim()
         ? config.name.trim()
@@ -63,7 +78,8 @@ export const buildRequiredComponents = (
 ): CircuitComponent[] => {
   const counters = new Map<string, number>();
   return placements.map((placement) => {
-    const { kind, value, name } = describePlacement(placement);
+    const { kind, value, name, params, terminals } =
+      describePlacement(placement);
     const prefix = getComponentSpec(kind).labelPrefix;
     const count = (counters.get(prefix) ?? 0) + 1;
     counters.set(prefix, count);
@@ -72,9 +88,50 @@ export const buildRequiredComponents = (
       label: name ?? `${prefix}${count}`,
       kind,
       value,
+      ...(params && { params }),
+      ...(terminals && { terminals }),
     };
   });
 };
+
+/** Terminals of a placed (or library) equipment, as the canvas shows them. */
+export const describeTerminals = (
+  equipment: {
+    equipmentName: string;
+    equipmentType: string;
+    defaultConfigJson?: unknown;
+  },
+  configJson?: unknown,
+): TerminalSpec[] => {
+  const { kind, terminals } = describePlacement({
+    id: '',
+    equipmentId: '',
+    configJson,
+    equipment,
+  });
+  return resolveTerminals(kind, terminals);
+};
+
+const toWires = (connections: LabWireLike[]): CircuitState['wires'] =>
+  connections.map((conn) => ({
+    from: {
+      componentId: conn.sourceEquipmentId,
+      handle: conn.sourceHandle ?? 'right',
+    },
+    to: {
+      componentId: conn.targetEquipmentId,
+      handle: conn.targetHandle ?? 'left',
+    },
+  }));
+
+/** The instructor's own circuit: the placements and the wires they drew. */
+export const buildReferenceCircuit = (
+  placements: LabPlacementLike[],
+  wires: LabWireLike[],
+): CircuitState => ({
+  components: buildRequiredComponents(placements),
+  wires: toWires(wires),
+});
 
 /**
  * Build the student's circuit. Kind, value and label are taken from the lab's
@@ -103,20 +160,11 @@ export const buildStudentCircuit = (
       label: seen > 1 ? `${baseLabel} (${seen})` : baseLabel,
       kind: source?.kind ?? 'unknown',
       value: source?.value ?? null,
+      refId: source?.id ?? null,
+      ...(source?.params && { params: source.params }),
+      ...(source?.terminals && { terminals: source.terminals }),
     };
   });
 
-  return {
-    components,
-    wires: student.connections.map((conn) => ({
-      from: {
-        componentId: conn.sourceEquipmentId,
-        handle: conn.sourceHandle ?? 'right',
-      },
-      to: {
-        componentId: conn.targetEquipmentId,
-        handle: conn.targetHandle ?? 'left',
-      },
-    })),
-  };
+  return { components, wires: toWires(student.connections) };
 };

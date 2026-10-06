@@ -14,9 +14,14 @@ import {
   UpdateWireConnectionsDto,
 } from './dto/lab.dto';
 import {
+  buildReferenceCircuit,
   buildRequiredComponents,
+  DEFAULT_CIRCUIT_RULES,
+  describeTerminals,
   InvalidCircuitRulesError,
   normalizeCircuitRules,
+  readStoredCircuitRules,
+  validateCircuit,
 } from '../circuit-validation';
 
 export type LabActor = {
@@ -184,6 +189,15 @@ export class LabService {
       labEquipments: lab.labEquipments.map((placement, index) => ({
         ...placement,
         componentLabel: required[index].label,
+        // Named connection points (e.g. + and −) the canvas draws as handles.
+        // Kept on the equipment so canvas nodes copied from it have them.
+        equipment: {
+          ...placement.equipment,
+          terminals: describeTerminals(
+            placement.equipment,
+            placement.configJson,
+          ),
+        },
       })),
     };
   }
@@ -471,8 +485,68 @@ export class LabService {
 
   /**
    * Set the circuit grading rules. Only the lab's instructor (or an admin)
-   * may change them; null returns the lab to legacy grading.
+   * may change them; null resets the lab to the default rules.
    */
+  /**
+   * Grade the instructor's own circuit with the lab rules, so the instructor
+   * can see how student circuits will be compared (fingerprint, topology,
+   * graph) and spot mistakes such as a reversed LED. Instructors only: the
+   * result describes the expected answer.
+   */
+  async getReferenceAnalysis(id: string, actor: LabActor) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      include: {
+        labEquipments: { include: { equipment: true } },
+        wireConnections: {
+          select: {
+            sourceEquipmentId: true,
+            targetEquipmentId: true,
+            sourceHandle: true,
+            targetHandle: true,
+          },
+        },
+      },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can view its reference circuit',
+    );
+
+    const rules = {
+      ...(readStoredCircuitRules(lab.circuitRulesJson) ??
+        DEFAULT_CIRCUIT_RULES),
+      allowedTopologies: ['any' as const],
+      requireStepsCompleted: false,
+    };
+    const reference = buildReferenceCircuit(
+      lab.labEquipments,
+      lab.wireConnections,
+    );
+    const result = validateCircuit({
+      required: reference.components,
+      circuit: reference,
+      rules,
+      debug: true,
+    });
+
+    return {
+      hasWires: reference.wires.length > 0,
+      fingerprint: result.debug?.student.fingerprint ?? null,
+      topology: result.summary.topology,
+      equivalentResistance: result.summary.equivalentResistance,
+      // Problems in the instructor's circuit would make every student fail.
+      warnings: reference.wires.length > 0 ? result.errors : [],
+      debug: result.debug?.student ?? null,
+    };
+  }
+
   async updateRules(id: string, actor: LabActor, rules: unknown) {
     const lab = await this.prisma.labInstance.findUnique({
       where: { id },

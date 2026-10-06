@@ -5,7 +5,6 @@ import {
   normalizeCircuitRules,
   readStoredCircuitRules,
   validateCircuit,
-  validateLegacyCircuit,
   type CircuitComponent,
   type CircuitRules,
   type CircuitState,
@@ -200,7 +199,7 @@ describe('circuit validator: multiple valid configurations', () => {
       const result = validate(circuit, rules(), [V1, ...REQUIRED]);
 
       expect(result.passed).toBe(false);
-      expect(result.errors).toContain('R3 terminal2 is not connected');
+      expect(result.errors).toContain('R3 terminal 2 is not connected');
     });
   });
 
@@ -427,7 +426,7 @@ describe('circuit validator: multiple valid configurations', () => {
       ).toThrow();
     });
 
-    it('treats missing stored rules as legacy grading', () => {
+    it('treats missing stored rules as "use the defaults"', () => {
       expect(readStoredCircuitRules(null)).toBeNull();
       expect(readStoredCircuitRules(undefined)).toBeNull();
     });
@@ -517,46 +516,5 @@ describe('Test 8: existing laboratories', () => {
 
     expect(result.passed).toBe(true);
     expect(result.checks.topology?.detected).toBe('series');
-  });
-
-  it('legacy grading (no rules) matches the previous client-side checks', () => {
-    const complete = validateLegacyCircuit({
-      expectedEquipmentIds: ['eq-supply', 'eq-res', 'eq-led'],
-      equipmentNames: {
-        'eq-supply': 'Dc Power Supply',
-        'eq-res': 'Resister',
-        'eq-led': 'LED',
-      },
-      expectedConnectionCount: 3,
-      placedEquipmentIds: ['eq-led', 'eq-res', 'eq-supply'],
-      connectionCount: 3,
-      steps: { total: 2, completed: 2 },
-    });
-    expect(complete).toMatchObject({
-      mode: 'legacy',
-      passed: true,
-      score: 100,
-    });
-
-    const partial = validateLegacyCircuit({
-      expectedEquipmentIds: ['eq-supply', 'eq-res', 'eq-led'],
-      equipmentNames: {
-        'eq-supply': 'Dc Power Supply',
-        'eq-res': 'Resister',
-        'eq-led': 'LED',
-      },
-      expectedConnectionCount: 3,
-      placedEquipmentIds: ['eq-res'],
-      connectionCount: 0,
-      steps: { total: 2, completed: 1 },
-    });
-    expect(partial.passed).toBe(false);
-    expect(partial.score).toBe(0);
-    expect(partial.errors).toEqual([
-      'Missing equipment: You have 1/3 items',
-      'Missing equipment: Dc Power Supply, LED',
-      'Missing connections: You have 0/3 connections',
-      'Complete all steps: 1/2 done',
-    ]);
   });
 });

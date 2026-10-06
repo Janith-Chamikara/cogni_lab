@@ -5,6 +5,18 @@ import {
   CreateLabEquipmentDto,
   UpdateLabEquipmentDto,
 } from './dto/lab-equipment.dto';
+import { describeTerminals } from '../circuit-validation';
+
+/** Add the named terminals the circuit canvas draws for this equipment. */
+const withTerminals = <
+  T extends {
+    equipmentName: string;
+    equipmentType: string;
+    defaultConfigJson: unknown;
+  },
+>(
+  equipment: T,
+) => ({ ...equipment, terminals: describeTerminals(equipment) });
 
 @Injectable()
 export class LabEquipmentService {
@@ -39,7 +51,7 @@ export class LabEquipmentService {
   }
 
   async findAll() {
-    return this.prisma.labEquipment.findMany({
+    const equipments = await this.prisma.labEquipment.findMany({
       include: {
         creator: {
           select: {
@@ -53,6 +65,7 @@ export class LabEquipmentService {
         createdAt: 'desc',
       },
     });
+    return equipments.map(withTerminals);
   }
 
   async findOne(id: string) {
@@ -78,16 +91,17 @@ export class LabEquipmentService {
       throw new NotFoundException(`Lab equipment with ID ${id} not found`);
     }
 
-    return equipment;
+    return withTerminals(equipment);
   }
 
   async findByCreator(creatorId: string) {
-    return this.prisma.labEquipment.findMany({
+    const equipments = await this.prisma.labEquipment.findMany({
       where: { creatorId },
       orderBy: {
         createdAt: 'desc',
       },
     });
+    return equipments.map(withTerminals);
   }
 
   async update(

@@ -6,6 +6,7 @@ import {
   ValidateNested,
   IsEnum,
   IsObject,
+  IsBoolean,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
@@ -173,4 +174,83 @@ export class UpdateWireConnectionsDto {
   @ValidateNested({ each: true })
   @Type(() => WireConnectionDto)
   connections: WireConnectionDto[];
+}
+
+// ---- Circuit validation ---------------------------------------------------
+
+export class UpdateCircuitRulesDto {
+  // Null clears the rules; the lab is then validated with the defaults.
+  // Shape is validated by normalizeCircuitRules in the service.
+  @IsOptional()
+  @IsObject()
+  rules: Record<string, unknown> | null;
+}
+
+export class StudentComponentDto {
+  @IsString()
+  id: string;
+
+  @IsString()
+  equipmentId: string;
+
+  @IsOptional()
+  @IsString()
+  labEquipmentId?: string;
+
+  @IsOptional()
+  @IsNumber()
+  positionX?: number;
+
+  @IsOptional()
+  @IsNumber()
+  positionY?: number;
+}
+
+export class StudentActionDto {
+  @IsString()
+  action: string;
+
+  @IsOptional()
+  @IsString()
+  componentId?: string;
+
+  @IsOptional()
+  @IsString()
+  from?: string;
+
+  @IsOptional()
+  @IsString()
+  to?: string;
+
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
+}
+
+export class StudentCircuitDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentComponentDto)
+  components: StudentComponentDto[];
+
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => WireConnectionDto)
+  connections: WireConnectionDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  completedStepIds?: string[];
+
+  // Analytics only; never used for grading.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentActionDto)
+  actionLog?: StudentActionDto[];
+  // Ask for graph/tree/fingerprint details (instructors or CIRCUIT_DEBUG).
+  @IsOptional()
+  @IsBoolean()
+  debug?: boolean;
 }

@@ -25,18 +25,37 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import type { Lab, Module, LabEquipment } from "@/lib/types";
+import type { Lab, Module, LabEquipment, LabAttemptSummary } from "@/lib/types";
 
 interface StudentDashboardClientProps {
   initialLabs: Lab[];
   initialModules: Module[];
   initialEquipment: LabEquipment[];
+  attemptSummary: LabAttemptSummary[];
+}
+
+/** Shows the student's best result for a lab, if they have submitted it. */
+function LabProgressBadge({ summary }: { summary?: LabAttemptSummary }) {
+  if (!summary) return null;
+
+  return summary.passed ? (
+    <Badge className="gap-1 bg-green-500">
+      <CheckCircle2 className="h-3 w-3" />
+      Validated
+    </Badge>
+  ) : (
+    <Badge variant="secondary" className="gap-1">
+      <Clock className="h-3 w-3" />
+      Not validated yet
+    </Badge>
+  );
 }
 
 export function StudentDashboardClient({
   initialLabs,
   initialModules,
   initialEquipment,
+  attemptSummary,
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -59,17 +78,29 @@ export function StudentDashboardClient({
     );
   }, [initialLabs, selectedModule, searchQuery]);
 
-  const stats = React.useMemo(
-    () => ({
+  // Only count attempts for labs that are still listed.
+  const attemptsByLab = React.useMemo(() => {
+    const labIds = new Set(initialLabs.map((lab) => lab.id));
+    return new Map(
+      attemptSummary
+        .filter((summary) => labIds.has(summary.labId))
+        .map((summary) => [summary.labId, summary]),
+    );
+  }, [initialLabs, attemptSummary]);
+
+  const stats = React.useMemo(() => {
+    const summaries = [...attemptsByLab.values()];
+    return {
       totalLabs: initialLabs.length,
-      completed: 0, // TODO: hook to progress tracking
-      inProgress: 0, // TODO: hook to progress tracking
+      // Completed = the student's best attempt passed.
+      completed: summaries.filter((s) => s.passed).length,
+      // In progress = submitted at least once but not passed yet.
+      inProgress: summaries.filter((s) => !s.passed).length,
       available: initialLabs.length,
       modules: initialModules.length,
       totalEquipment: initialEquipment.length,
-    }),
-    [initialLabs, initialModules, initialEquipment],
-  );
+    };
+  }, [initialLabs, initialModules, initialEquipment, attemptsByLab]);
 
   const handleStartLab = (labId: string) => {
     router.push(`/student/lab/${labId}`);
@@ -77,7 +108,7 @@ export function StudentDashboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
-      <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
+      <div className="container mx-auto max-w-[96rem] space-y-8 px-6 py-8">
         {/* Header Section (matches main dashboard) */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -247,6 +278,9 @@ export function StudentDashboardClient({
                               <Badge variant="outline">
                                 {lab.experimentSteps?.length || 0} Steps
                               </Badge>
+                              <LabProgressBadge
+                                summary={attemptsByLab.get(lab.id)}
+                              />
                             </div>
                             {lab.module && (
                               <div className="text-sm text-muted-foreground">
@@ -259,6 +293,9 @@ export function StudentDashboardClient({
                           <Button
                             className="w-full"
                             onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
                           >
                             Start Experiment
                           </Button>
@@ -344,6 +381,9 @@ export function StudentDashboardClient({
                               <Badge variant="outline">
                                 {lab.experimentSteps?.length || 0} Steps
                               </Badge>
+                              <LabProgressBadge
+                                summary={attemptsByLab.get(lab.id)}
+                              />
                             </div>
                             {lab.module && (
                               <div className="text-sm text-muted-foreground">
@@ -356,6 +396,9 @@ export function StudentDashboardClient({
                           <Button
                             className="w-full"
                             onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
                           >
                             Start Experiment
                           </Button>

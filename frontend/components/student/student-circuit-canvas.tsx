@@ -14,11 +14,12 @@ import {
   Node,
   NodeTypes,
   BackgroundVariant,
-  MarkerType,
+  ConnectionMode,
   useReactFlow,
   ReactFlowProvider,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { getTerminals, resolveHandleId } from "@/lib/circuit-terminals";
 import { EquipmentNode } from "@/components/lab/circuit-canvas/equipment-node";
 import { useTheme } from "next-themes";
 import { WIRE_COLORS } from "@/components/lab/circuit-canvas/constants";
@@ -62,6 +63,19 @@ function CircuitCanvasInner({
   const { screenToFlowPosition } = useReactFlow();
   const theme = useTheme();
 
+  // Named terminals per node, so wires saved with legacy handle ids
+  // (left/right/top/bottom) attach to the matching named handle.
+  const terminalsById = useMemo(
+    () =>
+      new Map(
+        placedEquipments.map((eq, index) => [
+          eq.id || `temp-${index}`,
+          getTerminals(eq.equipment),
+        ]),
+      ),
+    [placedEquipments],
+  );
+
   // Convert placed equipments to React Flow nodes
   const initialNodes: Node[] = useMemo(
     () =>
@@ -73,9 +87,9 @@ function CircuitCanvasInner({
           equipment: eq.equipment,
           index,
           onRemove: onEquipmentRemove,
-          // Student view does not support equipment config yet,
-          // so we pass a no-op handler for onConfig.
-          onConfig: () => {},
+          // No onConfig: component values come from the instructor's
+          // placements (the grader ignores student-side values).
+          looseTerminals: true,
         },
         draggable: !isWireMode,
       })),
@@ -89,20 +103,25 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "smoothstep",
         style: {
           stroke: conn.wireColor || "#374151",
           strokeWidth: 3,
         },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: conn.wireColor || "#374151",
-        },
+        // No arrowheads: a wire has no electrical direction.
         animated: true,
       })),
-    [wireConnections],
+    [wireConnections, terminalsById],
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -119,7 +138,7 @@ function CircuitCanvasInner({
           equipment: eq.equipment,
           index,
           onRemove: onEquipmentRemove,
-          onConfig: () => {},
+          looseTerminals: true,
         },
         draggable: !isWireMode,
       })),
@@ -133,21 +152,25 @@ function CircuitCanvasInner({
         id: conn.id || `edge-${index}`,
         source: conn.sourceEquipmentId,
         target: conn.targetEquipmentId,
-        sourceHandle: conn.sourceHandle || "right",
-        targetHandle: conn.targetHandle || "left",
+        sourceHandle: resolveHandleId(
+          terminalsById.get(conn.sourceEquipmentId) ?? null,
+          conn.sourceHandle,
+          "right",
+        ),
+        targetHandle: resolveHandleId(
+          terminalsById.get(conn.targetEquipmentId) ?? null,
+          conn.targetHandle,
+          "left",
+        ),
         type: "smoothstep",
         style: {
           stroke: conn.wireColor || "#22c55e",
           strokeWidth: 3,
         },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: conn.wireColor || "#22c55e",
-        },
         animated: true,
       })),
     );
-  }, [wireConnections, setEdges]);
+  }, [wireConnections, setEdges, terminalsById]);
 
   const onNodeDragStop = useCallback(
     (_: any, node: Node) => {
@@ -163,7 +186,7 @@ function CircuitCanvasInner({
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!isWireMode) return;
-      
+
       const newConnection = {
         id: `conn-${Date.now()}`,
         sourceEquipmentId: connection.source,
@@ -191,6 +214,32 @@ function CircuitCanvasInner({
     [isWireMode, wireConnections, onConnectionsChange],
   );
 
+  // Keyboard deletes (Backspace/Delete) must update the parent state too,
+  // otherwise the deleted wire or component would still be graded.
+  const onEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      const deletedIds = new Set(deleted.map((edge) => edge.id));
+      onConnectionsChange(
+        wireConnections.filter(
+          (conn, index) => !deletedIds.has(conn.id || `edge-${index}`),
+        ),
+      );
+    },
+    [wireConnections, onConnectionsChange],
+  );
+
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      // Remove from the highest index down so earlier indexes stay valid.
+      deleted
+        .map((node) => placedEquipments.findIndex((eq) => eq.id === node.id))
+        .filter((index) => index >= 0)
+        .sort((a, b) => b - a)
+        .forEach((index) => onEquipmentRemove(index));
+    },
+    [placedEquipments, onEquipmentRemove],
+  );
+
   const onDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
@@ -201,12 +250,13 @@ function CircuitCanvasInner({
       e.preventDefault();
 
       const equipmentId = e.dataTransfer.getData("application/equipment");
-      if (!equipmentId || !reactFlowWrapper.current) return;
+      if (!equipmentId) return;
 
-      const reactFlowBounds = reactFlowWrapper.current.getBoundingClientRect();
+      // screenToFlowPosition takes raw screen coordinates; it already
+      // accounts for the canvas offset, pan and zoom.
       const position = screenToFlowPosition({
-        x: e.clientX - reactFlowBounds.left,
-        y: e.clientY - reactFlowBounds.top,
+        x: e.clientX,
+        y: e.clientY,
       });
 
       onEquipmentDrop(equipmentId, position.x, position.y);
@@ -224,10 +274,24 @@ function CircuitCanvasInner({
         onNodeDragStop={onNodeDragStop}
         onConnect={onConnect}
         onEdgeClick={onEdgeClick}
+        onEdgesDelete={onEdgesDelete}
+        onNodesDelete={onNodesDelete}
+        // Any terminal can connect to any other terminal (needed for
+        // parallel wiring such as R1.left to R2.left).
+        connectionMode={ConnectionMode.Loose}
+        isValidConnection={(conn) =>
+          !(
+            conn.source === conn.target &&
+            conn.sourceHandle === conn.targetHandle
+          )
+        }
         onDragOver={onDragOver}
         onDrop={onDrop}
         nodeTypes={nodeTypes}
         fitView
+        // The canvas starts empty, so fitView fires on the first drop; cap
+        // the zoom so one component does not fill the canvas.
+        fitViewOptions={{ maxZoom: 1 }}
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode={null}
         snapToGrid
@@ -242,17 +306,14 @@ function CircuitCanvasInner({
           type: "smoothstep",
           animated: true,
         }}
-        colorMode={
-          theme.theme === "dark"
-            ? "dark"
-            : theme.theme === "light"
-              ? "light"
-              : "system"
-        }
+        // resolvedTheme is what the page actually shows ("system" resolved).
+        colorMode={theme.resolvedTheme === "dark" ? "dark" : "light"}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <Controls />
         <MiniMap
+          // Top right: the chat button sits in the bottom-right corner.
+          position="top-right"
           nodeStrokeWidth={3}
           zoomable
           pannable

@@ -83,7 +83,7 @@ export default function ModulesPage() {
 
   return (
     <div className="min-h-screen bg-background px-6 py-10">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-10">
+      <div className="mx-auto flex w-full max-w-[96rem] flex-col gap-10">
         <header className="space-y-4">
           <Button asChild variant="outline" size="sm" className="w-fit gap-2">
             <Link href="/dashboard">

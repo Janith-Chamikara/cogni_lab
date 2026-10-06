@@ -44,11 +44,14 @@ export function InstructorLabHelpDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        data-ai-reference-guide=""
+        className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lightbulb className="h-5 w-5 text-yellow-500" />
-            Student Lab Design - Reference Guide
+            Instructor Lab Design - Reference Guide
           </DialogTitle>
           <DialogDescription>
             Use this guide to understand the lab layout and design from your

@@ -29,9 +29,9 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { Lab, ExperimentStep } from "@/lib/types";
 import { StudentEquipmentCanvas } from "@/components/student/student-equipment-canvas";
-import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 import { buildLabContext } from "@/lib/ai-context";
 import { useAiPageContext } from "@/hooks/use-ai-page-context";
+import { InstructorLabHelpDialog } from "@/components/student/instructor-lab-help-dialog";
 
 interface StudentLabClientProps {
   lab: Lab;
@@ -48,7 +48,7 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
   const [setupEquipment, setSetupEquipment] = React.useState<Set<string>>(
     new Set(),
   );
-  const [isHelpOpen, setIsHelpOpen] = React.useState(false);
+  const [showHelpDialog, setShowHelpDialog] = React.useState(false);
 
   const steps = lab.experimentSteps || [];
   const currentStep = steps[currentStepIndex];
@@ -149,15 +149,6 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </div>
               <div className="flex items-center gap-2">
                 <Badge>{lab.module?.moduleName || "General"}</Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsHelpOpen(true)}
-                  className="gap-2"
-                >
-                  <Lightbulb className="h-4 w-4" />
-                  Instructor Help
-                </Button>
               </div>
             </div>
           </CardHeader>
@@ -283,6 +274,14 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                   ? `Setup Equipment (${Math.round(setupPercentage)}%)`
                   : "Start Experiment"}
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setShowHelpDialog(true)}
+                className="gap-2"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Get Help
+              </Button>
               <Button variant="outline" onClick={handleExitLab}>
                 <ChevronLeft className="h-4 w-4 mr-2" />
                 Back to Dashboard
@@ -290,6 +289,13 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Help Dialog */}
+        <InstructorLabHelpDialog
+          lab={lab}
+          isOpen={showHelpDialog}
+          onOpenChange={setShowHelpDialog}
+        />
       </div>
     );
   }
@@ -314,15 +320,6 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsHelpOpen(true)}
-                className="gap-2"
-              >
-                <Lightbulb className="h-4 w-4" />
-                Instructor Help
-              </Button>
               {/* Setup Status Indicator */}
               <div className="flex items-center gap-2 px-3 py-1 rounded-md bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                 <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />
@@ -339,6 +336,17 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
                 </span>
               </div>
               <Progress value={progressPercentage} className="w-32" />
+              <Separator orientation="vertical" className="h-6" />
+              {/* Get Help Button */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHelpDialog(true)}
+                className="gap-2"
+              >
+                <Lightbulb className="h-4 w-4" />
+                Get Help
+              </Button>
             </div>
           </div>
 
@@ -520,10 +528,11 @@ export function StudentLabClient({ lab }: StudentLabClientProps) {
         </div>
       </div>
 
+      {/* Help Dialog */}
       <InstructorLabHelpDialog
         lab={lab}
-        isOpen={isHelpOpen}
-        onOpenChange={setIsHelpOpen}
+        isOpen={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
       />
     </div>
   );

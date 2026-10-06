@@ -1,5 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client';
 import {
   CreateLabDto,
   UpdateLabDto,
@@ -7,6 +13,39 @@ import {
   UpdateLabStepsDto,
   UpdateWireConnectionsDto,
 } from './dto/lab.dto';
+import {
+  buildReferenceCircuit,
+  buildRequiredComponents,
+  DEFAULT_CIRCUIT_RULES,
+  describeTerminals,
+  InvalidCircuitRulesError,
+  normalizeCircuitRules,
+  readStoredCircuitRules,
+  validateCircuit,
+} from '../circuit-validation';
+
+export type LabActor = {
+  userId: string;
+  isInstructor: boolean;
+  isAdmin: boolean;
+};
+
+export type LabStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
+
+/**
+ * A lab's status as the instructor sees it, derived from student submissions
+ * (LabAttempt rows): none yet, submitted but not passed, or passed by at
+ * least one student. The stored completionStatus column is never updated.
+ */
+export const deriveLabStatus = (
+  attemptCount: number,
+  passedCount: number,
+): LabStatus =>
+  passedCount > 0
+    ? 'COMPLETED'
+    : attemptCount > 0
+      ? 'IN_PROGRESS'
+      : 'NOT_STARTED';
 
 @Injectable()
 export class LabService {
@@ -142,10 +181,58 @@ export class LabService {
       throw new NotFoundException(`Lab with ID ${id} not found`);
     }
 
-    return lab;
+    // Expose the labels the validator uses (R1, R2, ...) so the student UI
+    // and validation messages refer to components by the same names.
+    const required = buildRequiredComponents(lab.labEquipments);
+    return {
+      ...lab,
+      labEquipments: lab.labEquipments.map((placement, index) => ({
+        ...placement,
+        componentLabel: required[index].label,
+        // Named connection points (e.g. + and −) the canvas draws as handles.
+        // Kept on the equipment so canvas nodes copied from it have them.
+        equipment: {
+          ...placement.equipment,
+          terminals: describeTerminals(
+            placement.equipment,
+            placement.configJson,
+          ),
+        },
+      })),
+    };
   }
 
   async findByInstructor(instructorId: string) {
+    const [labs, attemptGroups] = await Promise.all([
+      this.findInstructorLabs(instructorId),
+      this.prisma.labAttempt.groupBy({
+        by: ['labId', 'passed'],
+        where: { lab: { instructorId } },
+        _count: { _all: true },
+      }),
+    ]);
+
+    const counts = new Map<string, { attempts: number; passed: number }>();
+    for (const group of attemptGroups) {
+      const entry = counts.get(group.labId) ?? { attempts: 0, passed: 0 };
+      entry.attempts += group._count._all;
+      if (group.passed) entry.passed += group._count._all;
+      counts.set(group.labId, entry);
+    }
+
+    return labs.map((lab) => {
+      const entry = counts.get(lab.id);
+      return {
+        ...lab,
+        completionStatus: deriveLabStatus(
+          entry?.attempts ?? 0,
+          entry?.passed ?? 0,
+        ),
+      };
+    });
+  }
+
+  private findInstructorLabs(instructorId: string) {
     return this.prisma.labInstance.findMany({
       where: { instructorId },
       include: {
@@ -277,18 +364,42 @@ export class LabService {
     return this.findOne(id);
   }
 
-  async delete(id: string) {
+  /**
+   * Delete a lab and, through cascades, its placements, wires, steps and
+   * student attempts. Only the lab's instructor (or an admin) may do this.
+   */
+  async delete(id: string, actor: LabActor) {
     const lab = await this.prisma.labInstance.findUnique({
       where: { id },
+      select: { id: true, instructorId: true },
     });
 
     if (!lab) {
       throw new NotFoundException(`Lab with ID ${id} not found`);
     }
 
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can delete it',
+    );
+
     return this.prisma.labInstance.delete({
       where: { id },
     });
+  }
+
+  private assertCanManage(
+    lab: { instructorId: string | null },
+    actor: LabActor,
+    message: string,
+  ) {
+    if (
+      !actor.isAdmin &&
+      (!actor.isInstructor || lab.instructorId !== actor.userId)
+    ) {
+      throw new ForbiddenException(message);
+    }
   }
 
   async getStats(instructorId: string) {
@@ -296,13 +407,16 @@ export class LabService {
       this.prisma.labInstance.count({
         where: { instructorId },
       }),
+      // Student submissions are stored as LabAttempt rows (the Submit button).
+      // completionStatus and ExperimentProgress are never written, so they
+      // cannot drive these numbers.
       this.prisma.labInstance.count({
         where: {
           instructorId,
-          completionStatus: 'IN_PROGRESS',
+          labAttempts: { some: {} },
         },
       }),
-      this.prisma.experimentProgress.count({
+      this.prisma.labAttempt.count({
         where: {
           lab: {
             instructorId,
@@ -365,6 +479,111 @@ export class LabService {
         })),
       });
     }
+
+    return this.findOne(id);
+  }
+
+  /**
+   * Set the circuit grading rules. Only the lab's instructor (or an admin)
+   * may change them; null resets the lab to the default rules.
+   */
+  /**
+   * Grade the instructor's own circuit with the lab rules, so the instructor
+   * can see how student circuits will be compared (fingerprint, topology,
+   * graph) and spot mistakes such as a reversed LED. Instructors only: the
+   * result describes the expected answer.
+   */
+  async getReferenceAnalysis(id: string, actor: LabActor) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      include: {
+        labEquipments: { include: { equipment: true } },
+        wireConnections: {
+          select: {
+            sourceEquipmentId: true,
+            targetEquipmentId: true,
+            sourceHandle: true,
+            targetHandle: true,
+          },
+        },
+      },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can view its reference circuit',
+    );
+
+    const rules = {
+      ...(readStoredCircuitRules(lab.circuitRulesJson) ??
+        DEFAULT_CIRCUIT_RULES),
+      allowedTopologies: ['any' as const],
+      requireStepsCompleted: false,
+    };
+    const reference = buildReferenceCircuit(
+      lab.labEquipments,
+      lab.wireConnections,
+    );
+    const result = validateCircuit({
+      required: reference.components,
+      circuit: reference,
+      rules,
+      debug: true,
+    });
+
+    return {
+      hasWires: reference.wires.length > 0,
+      fingerprint: result.debug?.student.fingerprint ?? null,
+      topology: result.summary.topology,
+      equivalentResistance: result.summary.equivalentResistance,
+      // Problems in the instructor's circuit would make every student fail.
+      warnings: reference.wires.length > 0 ? result.errors : [],
+      debug: result.debug?.student ?? null,
+    };
+  }
+
+  async updateRules(id: string, actor: LabActor, rules: unknown) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      select: { id: true, instructorId: true },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can change its rules',
+    );
+
+    let circuitRulesJson: ReturnType<typeof normalizeCircuitRules> | null =
+      null;
+    if (rules !== null && rules !== undefined) {
+      try {
+        circuitRulesJson = normalizeCircuitRules(rules);
+      } catch (error) {
+        if (error instanceof InvalidCircuitRulesError) {
+          throw new BadRequestException(error.message);
+        }
+        throw error;
+      }
+    }
+
+    await this.prisma.labInstance.update({
+      where: { id },
+      data: {
+        circuitRulesJson: circuitRulesJson
+          ? (circuitRulesJson as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
+      },
+    });
 
     return this.findOne(id);
   }

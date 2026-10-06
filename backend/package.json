@@ -82,6 +82,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^generated/(.*)$": "<rootDir>/../generated/$1",
+      "^(\\.{1,2}/.*)\\.js$": "$1"
+    }
   }
 }

@@ -139,7 +139,7 @@ export function DashboardClient({
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-muted/50 via-background to-muted/30">
-      <div className="container mx-auto max-w-7xl space-y-8 px-6 py-8">
+      <div className="container mx-auto max-w-[96rem] space-y-8 px-6 py-8">
         {/* Header Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -572,19 +572,11 @@ export function DashboardClient({
 
           <TabsContent value="modules">
             <Card className="border-0 shadow-lg">
-              <CardHeader className="gap-4 w-full sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <CardTitle>Course Modules</CardTitle>
-                  <CardDescription>
-                    Organize your labs by course modules
-                  </CardDescription>
-                </div>
-                <Button asChild variant="outline" size="sm" className="gap-2">
-                  <Link href="/modules">
-                    View all modules
-                    <ArrowUpRight className="h-4 w-4" />
-                  </Link>
-                </Button>
+              <CardHeader>
+                <CardTitle>Course Modules</CardTitle>
+                <CardDescription>
+                  Organize your labs by course modules
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -635,7 +627,7 @@ export function DashboardClient({
                   Track student performance and lab usage
                 </CardDescription>
               </CardHeader>
-              <CardContent className="flex min-h-75 items-center justify-center">
+              <CardContent className="flex min-h-[300px] items-center justify-center">
                 <div className="text-center">
                   <TrendingUp className="mx-auto h-12 w-12 text-muted-foreground/30" />
                   <p className="mt-4 text-muted-foreground">

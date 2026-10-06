@@ -5,6 +5,58 @@ import { createPortal } from "react-dom";
 import { visibleTargetRect, type GuidanceDisplay } from "@/lib/ai-guidance";
 
 type Bounds = { left: number; top: number; width: number; height: number };
+type Size = { width: number; height: number };
+
+const issuePopupPosition = (bounds: Bounds, popup: Size, viewport: Size) => {
+  const margin = 12;
+  const gap = 24;
+  const clamp = (value: number, size: number, limit: number) =>
+    Math.max(margin, Math.min(value, limit - size - margin));
+  const centeredLeft = clamp(
+    bounds.left + (bounds.width - popup.width) / 2,
+    popup.width,
+    viewport.width,
+  );
+  const centeredTop = clamp(
+    bounds.top + (bounds.height - popup.height) / 2,
+    popup.height,
+    viewport.height,
+  );
+  const candidates = [
+    { left: bounds.left + bounds.width + gap, top: centeredTop },
+    { left: bounds.left - popup.width - gap, top: centeredTop },
+    { left: centeredLeft, top: bounds.top + bounds.height + gap },
+    { left: centeredLeft, top: bounds.top - popup.height - gap },
+  ];
+  const fits = candidates.find(
+    ({ left, top }) =>
+      left >= margin &&
+      top >= margin &&
+      left + popup.width <= viewport.width - margin &&
+      top + popup.height <= viewport.height - margin,
+  );
+  if (fits) return fits;
+
+  // On narrow screens, use the candidate that covers the least of the target.
+  const clamped = candidates.map(({ left, top }) => ({
+    left: clamp(left, popup.width, viewport.width),
+    top: clamp(top, popup.height, viewport.height),
+  }));
+  const overlap = ({ left, top }: { left: number; top: number }) =>
+    Math.max(
+      0,
+      Math.min(left + popup.width, bounds.left + bounds.width) -
+        Math.max(left, bounds.left),
+    ) *
+    Math.max(
+      0,
+      Math.min(top + popup.height, bounds.top + bounds.height) -
+        Math.max(top, bounds.top),
+    );
+  return clamped.reduce((best, next) =>
+    overlap(next) < overlap(best) ? next : best,
+  );
+};
 
 const circlePath = (bounds: Bounds) => {
   const cx = bounds.left + bounds.width / 2,
@@ -22,6 +74,9 @@ const circlePath = (bounds: Bounds) => {
 export function AiGuidanceOverlay({ route }: { route: string }) {
   const [display, setDisplay] = useState<GuidanceDisplay | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
+  const [popupSize, setPopupSize] = useState<Size>({ width: 288, height: 120 });
+  const popupRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<GuidanceDisplay | null>(null);
   const cancelRef = useRef<() => void>(() => {});
 
@@ -35,6 +90,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
       }
       activeRef.current = next;
       setBounds(null);
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
       setDisplay(next);
     };
     window.addEventListener("cogni-ai-guidance", receive);
@@ -48,11 +104,28 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
   }, [route]);
 
   useEffect(() => {
+    if (display?.plan.purpose !== "issue" || !popupRef.current) return;
+    const popup = popupRef.current;
+    const observer = new ResizeObserver(() => {
+      const { width, height } = popup.getBoundingClientRect();
+      setPopupSize((previous) =>
+        previous.width === width && previous.height === height
+          ? previous
+          : { width, height },
+      );
+    });
+    observer.observe(popup);
+    return () => observer.disconnect();
+  }, [display]);
+
+  useEffect(() => {
     if (!display) return;
     let frame = 0,
       finished = false;
     const started = performance.now();
     let previous: Bounds | null = null;
+    let viewportWidth = window.innerWidth;
+    let viewportHeight = window.innerHeight;
     const cancel = () => {
       cancelAnimationFrame(frame);
       if (!finished) {
@@ -72,6 +145,14 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         return;
       }
       const current = visibleTargetRect(display.element);
+      if (
+        viewportWidth !== window.innerWidth ||
+        viewportHeight !== window.innerHeight
+      ) {
+        viewportWidth = window.innerWidth;
+        viewportHeight = window.innerHeight;
+        setViewport({ width: viewportWidth, height: viewportHeight });
+      }
       const elapsed = performance.now() - started;
       if (current) {
         if (
@@ -123,6 +204,11 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
     : window.innerHeight - 80;
   const arrowStartX = bounds ? Math.max(24, bounds.left - 65) : 0;
   const arrowStartY = bounds ? Math.max(24, bounds.top - 65) : 0;
+  const isIssue = display.plan.purpose === "issue";
+  const popupPosition =
+    isIssue && bounds
+      ? issuePopupPosition(bounds, popupSize, viewport)
+      : undefined;
   return createPortal(
     <div
       data-ai-guidance-overlay=""
@@ -220,13 +306,29 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         />
       </svg>
       <div
-        className="absolute bottom-24 left-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-blue-400/50 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg shadow-blue-500/20"
+        ref={popupRef}
+        className={`absolute rounded-xl border border-blue-400/50 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg shadow-blue-500/20 ${
+          isIssue
+            ? "pointer-events-auto w-[min(288px,calc(100vw-24px))] overflow-y-auto"
+            : "bottom-24 left-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2"
+        }`}
+        style={
+          isIssue
+            ? {
+                left: popupPosition?.left ?? 12,
+                top: popupPosition?.top ?? 12,
+                maxHeight: "calc(100dvh - 24px)",
+                visibility: popupPosition ? "visible" : "hidden",
+              }
+            : undefined
+        }
         role="status"
       >
         <div className="flex items-center justify-between gap-2">
           <span className="font-medium text-blue-500">
-            {display.plan.mode === "click" ? "Opening" : "Showing"}{" "}
-            {display.label}
+            {isIssue
+              ? "Circuit issue"
+              : `${display.plan.mode === "click" ? "Opening" : "Showing"} ${display.label}`}
           </span>
           <button
             type="button"
@@ -237,6 +339,11 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
             Dismiss
           </button>
         </div>
+        {isIssue && (
+          <p className="mt-1 truncate text-xs font-medium" title={display.label}>
+            {display.label}
+          </p>
+        )}
         <p className="mt-1 text-xs text-muted-foreground">
           {display.plan.reason}
         </p>

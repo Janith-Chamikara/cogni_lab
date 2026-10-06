@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { asRecord } from '../circuit-validation/circuit-rules';
 
 export type ScreenTarget = {
   id: string;
@@ -165,6 +166,69 @@ export const UI_GUIDANCE_TOOL = {
       additionalProperties: false,
     },
   },
+};
+
+/** Keep troubleshooting visual when the model only returns a text diagnosis. */
+export const workspaceIssueGuidance = (
+  inspection: unknown,
+  screen: ScreenContext | undefined,
+): GuidancePlan | undefined => {
+  const workspace = asRecord(inspection);
+  const validation = asRecord(workspace?.validation);
+  const checks = asRecord(validation?.checks) ?? {};
+  const warnings: unknown[] = Array.isArray(validation?.warnings)
+    ? validation.warnings
+    : [];
+  const hasIssues =
+    validation?.mode === 'rules' &&
+    (warnings.length > 0 ||
+      Object.entries(checks).some(
+        ([key, check]) => key !== 'steps' && asRecord(check)?.passed === false,
+      ));
+  if (!hasIssues || !screen || !Array.isArray(workspace?.components)) return;
+
+  const components = workspace.components.flatMap((value) => {
+    const component = asRecord(value);
+    return typeof component?.id === 'string' &&
+      typeof component.label === 'string' &&
+      normalizeLabel(component.label)
+      ? [{ id: component.id, label: normalizeLabel(component.label) }]
+      : [];
+  });
+  const errors: unknown[] = Array.isArray(validation?.errors)
+    ? validation.errors
+    : [];
+  const evidence = [...errors, ...warnings];
+  for (const error of evidence) {
+    if (typeof error !== 'string' || !error.trim()) continue;
+    const message = normalizeLabel(error);
+    const named = components.filter((component) =>
+      ` ${message} `.includes(` ${component.label} `),
+    );
+    // Prefer the part the error starts with; never guess between duplicate labels.
+    const leading = named.filter((component) =>
+      message.startsWith(`${component.label} `),
+    );
+    const matches = leading.length ? leading : named;
+    if (matches.length !== 1) continue;
+    const targets = screen.targets.filter(
+      (target) =>
+        target.kind === 'component' && target.componentId === matches[0].id,
+    );
+    if (targets.length !== 1) continue;
+    const reason = error.trim();
+    return proposeGuidance(
+      {
+        targetId: targets[0].id,
+        mode: 'circle',
+        purpose: 'issue',
+        reason: reason.length <= 180 ? reason : `${reason.slice(0, 177)}...`,
+      },
+      screen,
+      [],
+      true,
+    );
+  }
 };
 
 export const proposeGuidance = (

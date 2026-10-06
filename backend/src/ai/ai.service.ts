@@ -12,6 +12,7 @@ import { AI_TOOLS, AiToolsService } from './ai-tools.service';
 import { record, type AiChatRequest, type AiContext } from './ai-request';
 import {
   proposeGuidance,
+  workspaceIssueGuidance,
   authorizesNavigation,
   navigationClarification,
   navigationIntent,
@@ -63,6 +64,7 @@ export class AiService {
       : AI_TOOLS;
     let guidance: GuidancePlan | undefined;
     let hasWorkspaceIssues = false;
+    let workspaceInspection: unknown;
     const messages: ProviderMessage[] = [
       {
         role: 'system',
@@ -148,6 +150,37 @@ export class AiService {
             throw new BadGatewayException(
               'The assistant returned an empty response. Please retry.',
             );
+          if (
+            !guidance &&
+            screen?.targets.some((target) => target.kind === 'component') &&
+            request.context.workspace &&
+            /\btroubleshoot(?:ing)?\b/i.test(
+              request.messages.at(-1)?.content ?? '',
+            )
+          ) {
+            try {
+              workspaceInspection ??= await prepared.execute(
+                'inspect_workspace',
+                {},
+              );
+              guidance = workspaceIssueGuidance(workspaceInspection, screen);
+              if (guidance) {
+                usedTools.add('inspect_workspace');
+                usedTools.add('guide_ui');
+                const target = screen.targets.find(
+                  (item) => item.id === guidance!.targetId,
+                )!;
+                return {
+                  reply: `I’ll point out **${target.label}**.\n\n${guidance.reason}`,
+                  toolsUsed: [...usedTools],
+                  guidance,
+                };
+              }
+            } catch {
+              // Keep the chat reply if the read-only check is unavailable.
+              this.logger.warn('Could not locate a troubleshooting issue.');
+            }
+          }
           return {
             reply: message.content.trim().slice(0, 4000),
             toolsUsed: [...usedTools],
@@ -212,6 +245,7 @@ export class AiService {
                 'validation' in result
               ) {
                 const validation = record(result.validation);
+                workspaceInspection = result;
                 const checks = record(validation.checks);
                 hasWorkspaceIssues =
                   validation.mode === 'rules' &&

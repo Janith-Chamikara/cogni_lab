@@ -7,6 +7,30 @@ import { visibleTargetRect, type GuidanceDisplay } from "@/lib/ai-guidance";
 type Bounds = { left: number; top: number; width: number; height: number };
 type Size = { width: number; height: number };
 
+const guidanceColors = {
+  issue: {
+    primary: "#ef4444",
+    glow: "#dc2626",
+    halo: "#fca5a5",
+    panel: "border-red-400/50 shadow-red-500/20",
+    title: "text-red-600 dark:text-red-400",
+  },
+  locate: {
+    primary: "#3b82f6",
+    glow: "#2563eb",
+    halo: "#60a5fa",
+    panel: "border-blue-400/50 shadow-blue-500/20",
+    title: "text-blue-500",
+  },
+  navigate: {
+    primary: "#22c55e",
+    glow: "#16a34a",
+    halo: "#86efac",
+    panel: "border-green-400/50 shadow-green-500/20",
+    title: "text-green-600 dark:text-green-400",
+  },
+};
+
 const issuePopupPosition = (bounds: Bounds, popup: Size, viewport: Size) => {
   const margin = 12;
   const gap = 24;
@@ -205,6 +229,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
   const arrowStartX = bounds ? Math.max(24, bounds.left - 65) : 0;
   const arrowStartY = bounds ? Math.max(24, bounds.top - 65) : 0;
   const isIssue = display.plan.purpose === "issue";
+  const colors = guidanceColors[display.plan.purpose];
   const popupPosition =
     isIssue && bounds
       ? issuePopupPosition(bounds, popupSize, viewport)
@@ -221,7 +246,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         width="100%"
         height="100%"
         className="absolute inset-0 overflow-visible"
-        style={{ filter: "drop-shadow(0 0 6px #3b82f6)" }}
+        style={{ filter: `drop-shadow(0 0 6px ${colors.primary})` }}
       >
         <defs>
           <marker
@@ -235,7 +260,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
             <path
               d="M0 0 L8 4 L0 8"
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="1.6"
             />
           </marker>
@@ -247,7 +272,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               d={circlePath(bounds)}
               pathLength={1}
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="3"
               strokeLinecap="round"
               style={{
@@ -261,7 +286,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               d={`M${arrowStartX},${arrowStartY} Q${arrowStartX},${bounds.top + bounds.height / 2} ${bounds.left + 4},${bounds.top + bounds.height / 2}`}
               pathLength={1}
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="3"
               markerEnd="url(#cogni-guidance-arrow)"
               style={{
@@ -276,9 +301,9 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               width={bounds.width + 10}
               height={bounds.height + 10}
               rx="10"
-              fill="#3b82f6"
+              fill={colors.primary}
               fillOpacity=".08"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="2.5"
               style={{ animation: "cogni-guide-pulse 1.4s infinite" }}
             />
@@ -294,12 +319,12 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
           left: cursorX,
           top: cursorY,
           transition: "left .45s ease, top .45s ease",
-          filter: "drop-shadow(0 0 8px #2563eb) drop-shadow(0 0 16px #60a5fa)",
+          filter: `drop-shadow(0 0 8px ${colors.glow}) drop-shadow(0 0 16px ${colors.halo})`,
         }}
       >
         <path
           d="M0 0 L0 25 L7 19 L12 30 L17 28 L12 17 L22 17 Z"
-          fill="#3b82f6"
+          fill={colors.primary}
           stroke="white"
           strokeWidth="1.5"
           strokeLinejoin="round"
@@ -307,7 +332,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
       </svg>
       <div
         ref={popupRef}
-        className={`absolute rounded-xl border border-blue-400/50 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg shadow-blue-500/20 ${
+        className={`absolute rounded-xl border bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg ${colors.panel} ${
           isIssue
             ? "pointer-events-auto w-[min(288px,calc(100vw-24px))] overflow-y-auto"
             : "bottom-24 left-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2"
@@ -325,7 +350,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         role="status"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium text-blue-500">
+          <span className={`font-medium ${colors.title}`}>
             {isIssue
               ? "Circuit issue"
               : `${display.plan.mode === "click" ? "Opening" : "Showing"} ${display.label}`}

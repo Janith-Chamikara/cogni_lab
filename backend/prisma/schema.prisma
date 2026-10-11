@@ -138,6 +138,9 @@ model LabEquipment {
   description           String?
   supportsConfiguration Boolean @default(false)
   defaultConfigJson     Json?
+  // How the component behaves in circuits: terminals, branches, polarity,
+  // role and config fields (ComponentDefinition). Null: guessed preset.
+  componentSpecJson     Json?
   imageUrl              String?
   usedInLabs LabInstanceEquipment[]
   

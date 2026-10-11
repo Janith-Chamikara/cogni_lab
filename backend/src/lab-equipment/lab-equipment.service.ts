@@ -1,22 +1,63 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryProvider } from '../providers/cloudinary.provider';
 import {
   CreateLabEquipmentDto,
   UpdateLabEquipmentDto,
 } from './dto/lab-equipment.dto';
-import { describeTerminals } from '../circuit-validation';
+import {
+  COMPONENT_PRESETS,
+  type ComponentDefinition,
+  describeEquipmentComponent,
+  InvalidComponentDefinitionError,
+  normalizeComponentDefinition,
+} from '../circuit-validation';
 
-/** Add the named terminals the circuit canvas draws for this equipment. */
-const withTerminals = <
+/**
+ * Add how the equipment behaves in circuits: its definition (own or preset)
+ * and the named terminals the circuit canvas draws.
+ */
+const withComponent = <
   T extends {
     equipmentName: string;
     equipmentType: string;
     defaultConfigJson: unknown;
+    componentSpecJson: unknown;
   },
 >(
   equipment: T,
-) => ({ ...equipment, terminals: describeTerminals(equipment) });
+) => ({ ...equipment, ...describeEquipmentComponent(equipment) });
+
+/**
+ * Check a component definition from the request. Multipart bodies carry it
+ * as JSON text. Undefined leaves it unchanged; null removes it (preset).
+ */
+const readComponentSpec = (
+  value: unknown,
+): ComponentDefinition | null | undefined => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  try {
+    const parsed: unknown =
+      typeof value === 'string' ? JSON.parse(value) : value;
+    return normalizeComponentDefinition(parsed);
+  } catch (error) {
+    if (error instanceof InvalidComponentDefinitionError) {
+      throw new BadRequestException(error.message);
+    }
+    throw new BadRequestException('componentSpec must be valid JSON');
+  }
+};
+
+const toJson = (definition: ComponentDefinition | null) =>
+  definition === null
+    ? Prisma.DbNull
+    : (definition as unknown as Prisma.InputJsonObject);
 
 @Injectable()
 export class LabEquipmentService {
@@ -37,17 +78,24 @@ export class LabEquipmentService {
       imageUrl = uploadResult.public_id;
     }
 
-    return this.prisma.labEquipment.create({
+    const componentSpec = readComponentSpec(dto.componentSpec);
+    const hasFields = (componentSpec?.fields.length ?? 0) > 0;
+
+    const equipment = await this.prisma.labEquipment.create({
       data: {
         creatorId,
         equipmentType: dto.equipmentType,
         equipmentName: dto.equipmentName,
         description: dto.description,
-        supportsConfiguration: dto.supportsConfiguration ?? false,
+        supportsConfiguration: dto.supportsConfiguration ?? hasFields,
         defaultConfigJson: dto.defaultConfigJson ?? undefined,
+        ...(componentSpec !== undefined && {
+          componentSpecJson: toJson(componentSpec),
+        }),
         imageUrl,
       },
     });
+    return withComponent(equipment);
   }
 
   async findAll() {
@@ -65,7 +113,7 @@ export class LabEquipmentService {
         createdAt: 'desc',
       },
     });
-    return equipments.map(withTerminals);
+    return equipments.map(withComponent);
   }
 
   async findOne(id: string) {
@@ -91,7 +139,7 @@ export class LabEquipmentService {
       throw new NotFoundException(`Lab equipment with ID ${id} not found`);
     }
 
-    return withTerminals(equipment);
+    return withComponent(equipment);
   }
 
   async findByCreator(creatorId: string) {
@@ -101,7 +149,7 @@ export class LabEquipmentService {
         createdAt: 'desc',
       },
     });
-    return equipments.map(withTerminals);
+    return equipments.map(withComponent);
   }
 
   async update(
@@ -117,6 +165,7 @@ export class LabEquipmentService {
       throw new NotFoundException(`Lab equipment with ID ${id} not found`);
     }
 
+    const componentSpec = readComponentSpec(dto.componentSpec);
     let imageUrl = equipment.imageUrl;
 
     if (image) {
@@ -128,7 +177,7 @@ export class LabEquipmentService {
       imageUrl = uploadResult.public_id;
     }
 
-    return this.prisma.labEquipment.update({
+    const updated = await this.prisma.labEquipment.update({
       where: { id },
       data: {
         ...(dto.equipmentType && { equipmentType: dto.equipmentType }),
@@ -140,9 +189,18 @@ export class LabEquipmentService {
         ...(dto.defaultConfigJson !== undefined && {
           defaultConfigJson: dto.defaultConfigJson,
         }),
+        ...(componentSpec !== undefined && {
+          componentSpecJson: toJson(componentSpec),
+        }),
         ...(imageUrl !== equipment.imageUrl && { imageUrl }),
       },
     });
+    return withComponent(updated);
+  }
+
+  /** Ready-made definitions creators can start from. */
+  findPresets() {
+    return COMPONENT_PRESETS;
   }
 
   async remove(id: string) {
@@ -180,12 +238,13 @@ export class LabEquipmentService {
 
     const uploadResult = await this.cloudinary.uploadImage(image);
 
-    return this.prisma.labEquipment.update({
+    const updated = await this.prisma.labEquipment.update({
       where: { id },
       data: {
         imageUrl: uploadResult.public_id,
       },
     });
+    return withComponent(updated);
   }
 
   async removeImage(id: string) {
@@ -201,11 +260,12 @@ export class LabEquipmentService {
       await this.cloudinary.deleteImage(equipment.imageUrl);
     }
 
-    return this.prisma.labEquipment.update({
+    const updated = await this.prisma.labEquipment.update({
       where: { id },
       data: {
         imageUrl: null,
       },
     });
+    return withComponent(updated);
   }
 }

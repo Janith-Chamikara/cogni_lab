@@ -471,7 +471,13 @@ describe('Test 8: existing laboratories', () => {
   ];
 
   it('derives required components from existing placements', () => {
-    expect(buildRequiredComponents(placements)).toEqual([
+    const required = buildRequiredComponents(placements).map(
+      ({ spec, ...component }) => {
+        expect(spec?.kind).toBe(component.kind);
+        return component;
+      },
+    );
+    expect(required).toEqual([
       { id: 'p-supply', label: 'V1', kind: 'power_source', value: 12 },
       { id: 'p-res', label: 'R1', kind: 'resistor', value: 1000 },
       { id: 'p-led', label: 'LED1', kind: 'led', value: null },

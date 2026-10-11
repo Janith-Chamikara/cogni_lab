@@ -26,6 +26,11 @@ export class CreateLabEquipmentDto {
   @IsObject()
   @IsOptional()
   defaultConfigJson?: Record<string, any>;
+
+  /** How the component behaves in circuits (a ComponentDefinition). */
+  @IsObject()
+  @IsOptional()
+  componentSpec?: Record<string, any> | null;
 }
 
 export class UpdateLabEquipmentDto {
@@ -48,4 +53,9 @@ export class UpdateLabEquipmentDto {
   @IsObject()
   @IsOptional()
   defaultConfigJson?: Record<string, any>;
+
+  /** How the component behaves in circuits (a ComponentDefinition). */
+  @IsObject()
+  @IsOptional()
+  componentSpec?: Record<string, any> | null;
 }

@@ -12,7 +12,9 @@ export const labEquipmentSchema = z.object({
     .min(1, "Equipment name is required")
     .max(120, "Equipment name is too long"),
   description: z.string().optional(),
-  supportsConfiguration: z.boolean(),
+  // Only used by the older components/create-lab-equipment-dialog.tsx; the
+  // equipment dialog now sends a component definition instead.
+  supportsConfiguration: z.boolean().optional(),
   defaultConfigJson: z
     .string()
     .optional()

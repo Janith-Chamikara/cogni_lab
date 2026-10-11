@@ -3,6 +3,7 @@ import { createClerkClient } from '@clerk/backend';
 import { Prisma, PrismaClient } from '../generated/prisma/client';
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
 import { DEFAULT_CIRCUIT_RULES } from '../src/circuit-validation/circuit-rules';
+import { COMPONENT_PRESETS } from '../src/circuit-validation/component-presets';
 
 const adapter = new PrismaBetterSqlite3({ url: 'file:./dev.db' });
 const prisma = new PrismaClient({ adapter } as any);
@@ -215,7 +216,9 @@ async function findOrCreateEquipment(
   equipmentName: string,
   equipmentType: string,
   defaultConfigJson: Prisma.InputJsonObject | null,
+  presetId: string,
 ) {
+  const preset = COMPONENT_PRESETS.find((p) => p.id === presetId);
   const existing = await prisma.labEquipment.findFirst({
     where: { creatorId, equipmentName },
   });
@@ -225,8 +228,12 @@ async function findOrCreateEquipment(
       creatorId,
       equipmentName,
       equipmentType,
-      supportsConfiguration: defaultConfigJson !== null,
+      supportsConfiguration: (preset?.definition.fields.length ?? 0) > 0,
       defaultConfigJson: defaultConfigJson ?? undefined,
+      // Store the definition so the equipment does not rely on its name.
+      componentSpecJson: preset
+        ? (preset.definition as unknown as Prisma.InputJsonObject)
+        : undefined,
     },
   });
 }
@@ -249,24 +256,28 @@ async function seedDemoLab(instructorId: string) {
     'DC Power Supply',
     'Power',
     { voltage: 12 },
+    'power_supply',
   );
   const resistor = await findOrCreateEquipment(
     instructorId,
     'Resistor',
     'Component',
     { resistance: 100 },
+    'resistor',
   );
   const led = await findOrCreateEquipment(
     instructorId,
     'LED',
     'Component',
     null,
+    'led',
   );
   const voltmeter = await findOrCreateEquipment(
     instructorId,
     'Voltmeter',
     'Instrument',
     null,
+    'voltmeter',
   );
 
   const lab = await prisma.labInstance.create({

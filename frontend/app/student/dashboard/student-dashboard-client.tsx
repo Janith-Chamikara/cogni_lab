@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   FlaskConical,
@@ -13,6 +14,7 @@ import {
   Calendar,
   Users,
   ChevronRight,
+  UserPlus,
 } from "lucide-react";
 import {
   Card,
@@ -61,6 +63,8 @@ interface StudentDashboardClientProps {
   initialModules: Module[];
   initialEquipment: LabEquipment[];
   attemptSummary: LabAttemptSummary[];
+  /** Labs from the instructors the student follows. */
+  followedLabs: Lab[];
 }
 
 /** Shows the student's best result for a lab, if they have submitted it. */
@@ -84,7 +88,7 @@ function LabProgressBadge({ summary }: { summary?: LabAttemptSummary }) {
 const statusOf = (summary?: LabAttemptSummary): LabStatusFilter =>
   !summary ? "not_started" : summary.passed ? "validated" : "in_progress";
 
-function LabCard({
+export function LabCard({
   lab,
   summary,
   onStart,
@@ -150,6 +154,7 @@ export function StudentDashboardClient({
   initialModules,
   initialEquipment,
   attemptSummary,
+  followedLabs,
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -417,6 +422,56 @@ export function StudentDashboardClient({
           {/* Overview: quick summary using the same labs grid component students already had */}
           <TabsContent value="overview" className="space-y-6">
             <Card className="border-0 shadow-lg">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                <div className="space-y-1.5">
+                  <CardTitle>Following</CardTitle>
+                  <CardDescription>
+                    Latest labs from the instructors you follow
+                  </CardDescription>
+                </div>
+                {followedLabs.length > 0 && (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/student/instructors">Manage</Link>
+                  </Button>
+                )}
+              </CardHeader>
+              <CardContent>
+                {followedLabs.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <UserPlus className="mx-auto h-12 w-12 text-muted-foreground" />
+                    <h3 className="mt-4 text-lg font-semibold">
+                      You are not following any instructors yet
+                    </h3>
+                    <p className="mt-2 text-muted-foreground">
+                      Follow instructors to see their labs here.
+                    </p>
+                    <Button asChild className="mt-4">
+                      <Link
+                        href="/student/instructors"
+                        data-ai-action="navigate"
+                        data-ai-href="/student/instructors"
+                        data-ai-label="Find instructors to follow"
+                      >
+                        Find instructors
+                      </Link>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                    {followedLabs.slice(0, 6).map((lab) => (
+                      <LabCard
+                        key={lab.id}
+                        lab={lab}
+                        summary={attemptsByLab.get(lab.id)}
+                        onStart={() => handleStartLab(lab.id)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-lg">
               <CardHeader>
                 <CardTitle>Getting Started</CardTitle>
                 <CardDescription>
@@ -589,11 +644,20 @@ export function StudentDashboardClient({
           <TabsContent value="instructors">
             <Card className="border-0 shadow-lg">
               <CardHeader>
-                <CardTitle>Instructors</CardTitle>
-                <CardDescription>
-                  Instructors of your available labs. Contact them if you need
-                  help with an experiment.
-                </CardDescription>
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="space-y-1.5">
+                    <CardTitle>Instructors</CardTitle>
+                    <CardDescription>
+                      Instructors of your available labs. Contact them if you
+                      need help with an experiment.
+                    </CardDescription>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/student/instructors">
+                      Browse all instructors
+                    </Link>
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {instructors.length === 0 ? (

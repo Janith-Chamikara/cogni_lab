@@ -46,6 +46,8 @@ model User {
   createdEquipments   LabEquipment[]
   experimentProgress  ExperimentProgress[]
   labAttempts         LabAttempt[]
+  following           InstructorFollow[] @relation("StudentFollows")
+  followers           InstructorFollow[] @relation("InstructorFollowers")
 
   @@map("users")
 }
@@ -218,4 +220,18 @@ model LabAttempt {
   @@map("lab_attempts")
 }
 
+// A student following an instructor to see their labs.
+model InstructorFollow {
+  id           String   @id @default(uuid())
+  studentId    String
+  instructorId String
+  createdAt    DateTime @default(now())
 
+  // Relations
+  student      User @relation("StudentFollows", fields: [studentId], references: [id], onDelete: Cascade)
+  instructor   User @relation("InstructorFollowers", fields: [instructorId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, instructorId])
+  @@index([instructorId])
+  @@map("instructor_follows")
+}

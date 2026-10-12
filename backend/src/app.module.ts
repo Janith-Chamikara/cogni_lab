@@ -8,6 +8,7 @@ import { LabEquipmentModule } from './lab-equipment/lab-equipment.module';
 import { ModuleModule } from './module/module.module';
 import { LabModule } from './lab/lab.module';
 import { AiModule } from './ai/ai.module';
+import { FollowModule } from './follow/follow.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { AiModule } from './ai/ai.module';
     ModuleModule,
     LabModule,
     AiModule,
+    FollowModule,
   ],
   providers: [
     ClerkClientProvider,

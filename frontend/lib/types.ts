@@ -104,6 +104,23 @@ export type LabInstructor = {
   university?: string | null;
 };
 
+/** An instructor as listed to students, with their follow state. */
+export type InstructorSummary = LabInstructor & {
+  followerCount: number;
+  labCount: number;
+  isFollowing: boolean;
+};
+
+export type InstructorProfile = InstructorSummary & {
+  labs: Lab[];
+};
+
+export type FollowStatus = {
+  instructorId: string;
+  following: boolean;
+  followerCount: number;
+};
+
 export type Lab = {
   id: string;
   instructorId: string;

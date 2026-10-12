@@ -1,6 +1,7 @@
 "use server";
 
 import { auth, clerkClient } from "@clerk/nextjs/server";
+import { revalidatePath } from "next/cache";
 import { AxiosError } from "axios";
 import api from "./axios";
 import { OnboardingFormValues } from "./schemas/onboarding";
@@ -26,6 +27,9 @@ import {
   Module,
   UpdateLabPayload,
   WireConnection,
+  InstructorSummary,
+  InstructorProfile,
+  FollowStatus,
 } from "./types";
 
 const getAuthToken = async () => {
@@ -685,5 +689,122 @@ export const getMyAttemptSummary = async (): Promise<
   } catch (error) {
     console.error(error);
     return { error: getErrorMessage(error, "Failed to load your progress.") };
+  }
+};
+
+export const getInstructors = async (): Promise<
+  ActionResult<InstructorSummary[]>
+> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view instructors." };
+    }
+
+    const response = await api.get<InstructorSummary[]>(
+      "/follow/instructors",
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load instructors.") };
+  }
+};
+
+export const getInstructorProfile = async (
+  id: string,
+): Promise<ActionResult<InstructorProfile>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view this instructor." };
+    }
+
+    const response = await api.get<InstructorProfile>(
+      `/follow/instructors/${id}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load instructor.") };
+  }
+};
+
+export const getFollowedLabs = async (): Promise<ActionResult<Lab[]>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view followed labs." };
+    }
+
+    const response = await api.get<Lab[]>("/follow/me/labs", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load followed labs.") };
+  }
+};
+
+/** Pages that show follow state, refreshed after a follow or unfollow. */
+const revalidateFollowPages = (instructorId: string) => {
+  revalidatePath("/student/instructors");
+  revalidatePath(`/student/instructors/${instructorId}`);
+  revalidatePath("/student/dashboard");
+};
+
+export const followInstructor = async (
+  id: string,
+): Promise<ActionResult<FollowStatus>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to follow an instructor." };
+    }
+
+    const response = await api.post<FollowStatus>(
+      `/follow/instructors/${id}`,
+      undefined,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    revalidateFollowPages(id);
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to follow instructor.") };
+  }
+};
+
+export const unfollowInstructor = async (
+  id: string,
+): Promise<ActionResult<FollowStatus>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to unfollow an instructor." };
+    }
+
+    const response = await api.delete<FollowStatus>(
+      `/follow/instructors/${id}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    revalidateFollowPages(id);
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to unfollow instructor.") };
   }
 };

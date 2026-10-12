@@ -1,4 +1,5 @@
 import {
+  getFollowedLabs,
   getLabEquipments,
   getModules,
   getMyAttemptSummary,
@@ -7,13 +8,19 @@ import {
 import { StudentDashboardClient } from "./student-dashboard-client";
 
 export default async function StudentDashboardPage() {
-  const [labsResult, modulesResult, equipmentResult, attemptsResult] =
-    await Promise.all([
-      getPublishedLabs(),
-      getModules(),
-      getLabEquipments(),
-      getMyAttemptSummary(),
-    ]);
+  const [
+    labsResult,
+    modulesResult,
+    equipmentResult,
+    attemptsResult,
+    followedLabsResult,
+  ] = await Promise.all([
+    getPublishedLabs(),
+    getModules(),
+    getLabEquipments(),
+    getMyAttemptSummary(),
+    getFollowedLabs(),
+  ]);
 
   return (
     <StudentDashboardClient
@@ -21,6 +28,7 @@ export default async function StudentDashboardPage() {
       initialModules={modulesResult.data ?? []}
       initialEquipment={equipmentResult.data ?? []}
       attemptSummary={attemptsResult.data ?? []}
+      followedLabs={followedLabsResult.data ?? []}
     />
   );
 }

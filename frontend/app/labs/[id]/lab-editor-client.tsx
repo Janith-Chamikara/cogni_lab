@@ -4,8 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Archive,
   ArrowLeft,
   CheckCircle2,
+  FilePen,
+  Globe,
+  MoreHorizontal,
   ListChecks,
   Maximize2,
   Minimize2,
@@ -20,14 +24,23 @@ import {
   ExperimentStep,
   Lab,
   LabEquipment,
+  LabPublishStatus,
   WireConnection,
 } from "@/lib/types";
 import {
   updateLabConnections,
   updateLabEquipments,
+  updateLabPublishStatus,
   updateLabSteps,
 } from "@/lib/actions";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EquipmentSidebar } from "@/components/lab/equipment-sidebar";
@@ -54,6 +67,29 @@ type EditorState = {
   placedEquipments: PlacedEquipment[];
   wireConnections: WireConnection[];
   steps: ExperimentStep[];
+};
+
+const PUBLISH_BADGE: Record<
+  LabPublishStatus,
+  { label: string; className: string; title: string }
+> = {
+  DRAFT: {
+    label: "Draft",
+    className:
+      "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    title: "Students cannot see this lab yet",
+  },
+  PUBLISHED: {
+    label: "Published",
+    className:
+      "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    title: "Students can see and attempt this lab",
+  },
+  ARCHIVED: {
+    label: "Archived",
+    className: "bg-muted text-muted-foreground",
+    title: "Hidden from students; submitted attempts are kept",
+  },
 };
 
 type SaveStatus =
@@ -125,6 +161,10 @@ export function LabEditorClient({
   const [steps, setSteps] = useState<ExperimentStep[]>(saved.steps);
 
   const [saveStatus, setSaveStatus] = useState<SaveStatus>({ status: "idle" });
+  const [publishStatus, setPublishStatus] = useState<LabPublishStatus>(
+    lab.publishStatus ?? "DRAFT",
+  );
+  const [isPublishing, setIsPublishing] = useState(false);
   // Bumped after each save so the reference debug panel reloads.
   const [savedVersion, setSavedVersion] = useState(0);
   const [isThresholdsOpen, setIsThresholdsOpen] = useState(false);
@@ -151,6 +191,8 @@ export function LabEditorClient({
   const current: EditorState = { placedEquipments, wireConnections, steps };
   const isDirty = snapshotOf(current) !== snapshotOf(saved);
   const isSaving = saveStatus.status === "saving";
+  // Same rule as the server: a lab needs a part or a step to be published.
+  const canPublish = placedEquipments.length > 0 || steps.length > 0;
 
   const labContext = useMemo(
     () =>
@@ -260,8 +302,9 @@ export function LabEditorClient({
     [configEquipment],
   );
 
-  const handleSave = async () => {
-    if (isSaving) return;
+  /** Saves the lab; resolves to false if anything failed. */
+  const handleSave = async (): Promise<boolean> => {
+    if (isSaving) return false;
     setSaveStatus({ status: "saving" });
 
     const equipmentResult = await updateLabEquipments(
@@ -279,7 +322,7 @@ export function LabEditorClient({
         status: "error",
         message: equipmentResult.error ?? "Could not save the equipment.",
       });
-      return;
+      return false;
     }
 
     const newEquipments: PlacedEquipment[] =
@@ -323,7 +366,7 @@ export function LabEditorClient({
     const failure = connectionResult.error ?? stepResult.error;
     if (failure) {
       setSaveStatus({ status: "error", message: failure });
-      return;
+      return false;
     }
     setSaved({
       placedEquipments: newEquipments,
@@ -339,6 +382,26 @@ export function LabEditorClient({
         ),
       2500,
     );
+    return true;
+  };
+
+  // Publishing saves unsaved changes first, so students get what is shown.
+  const changePublishStatus = async (next: LabPublishStatus) => {
+    if (isPublishing) return;
+    if (next === "PUBLISHED" && isDirty && !(await handleSave())) return;
+
+    setIsPublishing(true);
+    const result = await updateLabPublishStatus(lab.id, next);
+    setIsPublishing(false);
+
+    if (result.error || !result.data) {
+      setSaveStatus({
+        status: "error",
+        message: result.error ?? "Could not change the lab status.",
+      });
+      return;
+    }
+    setPublishStatus(result.data.publishStatus);
   };
 
   // Ctrl/Cmd + S saves the lab.
@@ -407,12 +470,21 @@ export function LabEditorClient({
             </Button>
             <Separator orientation="vertical" className="h-6" />
             <div className="min-w-0">
-              <h1
-                className="truncate text-base font-semibold leading-tight"
-                title={lab.labName}
-              >
-                {lab.labName}
-              </h1>
+              <div className="flex min-w-0 items-center gap-2">
+                <h1
+                  className="truncate text-base font-semibold leading-tight"
+                  title={lab.labName}
+                >
+                  {lab.labName}
+                </h1>
+                <Badge
+                  variant="outline"
+                  className={`shrink-0 ${PUBLISH_BADGE[publishStatus].className}`}
+                  title={PUBLISH_BADGE[publishStatus].title}
+                >
+                  {PUBLISH_BADGE[publishStatus].label}
+                </Badge>
+              </div>
               <p className="truncate text-xs text-muted-foreground">
                 {lab.module?.moduleName || "Lab editor"}
               </p>
@@ -470,6 +542,7 @@ export function LabEditorClient({
             </Button>
             <Button
               size="sm"
+              variant={publishStatus === "PUBLISHED" ? "default" : "outline"}
               onClick={handleSave}
               disabled={isSaving}
               data-lab-save
@@ -478,6 +551,59 @@ export function LabEditorClient({
               <Save className="mr-2 h-4 w-4" />
               {isSaving ? "Saving..." : "Save"}
             </Button>
+            {publishStatus !== "PUBLISHED" && (
+              // The wrapper shows the reason while the button is disabled.
+              <span
+                title={
+                  canPublish
+                    ? "Save and make this lab visible to students"
+                    : "Add at least one part or step to publish this lab"
+                }
+              >
+                <Button
+                  size="sm"
+                  onClick={() => changePublishStatus("PUBLISHED")}
+                  disabled={!canPublish || isPublishing || isSaving}
+                >
+                  <Globe className="mr-2 h-4 w-4" />
+                  {isPublishing ? "Publishing..." : "Publish"}
+                </Button>
+              </span>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={isPublishing}
+                  aria-label="More lab status options"
+                  title="More status options"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {publishStatus !== "DRAFT" && (
+                  <DropdownMenuItem
+                    onClick={() => changePublishStatus("DRAFT")}
+                  >
+                    <FilePen className="mr-2 h-4 w-4" />
+                    {publishStatus === "PUBLISHED"
+                      ? "Unpublish (back to draft)"
+                      : "Move to draft"}
+                  </DropdownMenuItem>
+                )}
+                {publishStatus !== "ARCHIVED" && (
+                  <DropdownMenuItem
+                    onClick={() => changePublishStatus("ARCHIVED")}
+                  >
+                    <Archive className="mr-2 h-4 w-4" />
+                    Archive
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ReferenceDebugToggle labId={lab.id} savedVersion={savedVersion} />
           </div>
         </div>

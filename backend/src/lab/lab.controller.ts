@@ -8,11 +8,13 @@ import {
   Body,
   Req,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { User as ClerkUser } from '@clerk/backend';
 import { LabService } from './lab.service';
 import { LabAttemptService } from './lab-attempt.service';
+import { LabDraftService } from './lab-draft.service';
 import {
   CreateLabDto,
   UpdateLabDto,
@@ -21,6 +23,8 @@ import {
   UpdateWireConnectionsDto,
   UpdateCircuitRulesDto,
   StudentCircuitDto,
+  SaveLabDraftDto,
+  UpdatePublishStatusDto,
 } from './dto/lab.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -33,6 +37,7 @@ export class LabController {
   constructor(
     private readonly labService: LabService,
     private readonly labAttemptService: LabAttemptService,
+    private readonly labDraftService: LabDraftService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -71,7 +76,19 @@ export class LabController {
       userId: user.id,
       isAdmin,
       isInstructor: isAdmin || role === 'INSTRUCTOR',
+      isStudent: role === 'STUDENT',
     };
+  }
+
+  /** Drafts belong to students; returns the student's local user id. */
+  private async requireStudent(clerkUser: ClerkUser): Promise<string> {
+    const actor = await this.getActor(clerkUser);
+
+    if (!actor.isStudent) {
+      throw new ForbiddenException('Only students can save lab drafts');
+    }
+
+    return actor.userId;
   }
 
   @Post()
@@ -104,14 +121,22 @@ export class LabController {
     return this.labAttemptService.findMySummary(userId);
   }
 
+  // Declared before ':id' so "my-drafts" is not treated as a lab id.
+  @Get('my-drafts')
+  async findMyDraftSummary(@Req() req: AuthenticatedRequest) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.findMySummary(userId);
+  }
+
   @Get('module/:moduleId')
   async findByModule(@Param('moduleId') moduleId: string) {
     return this.labService.findByModule(moduleId);
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.labService.findOne(id);
+  async findOne(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const actor = await this.getActor(req.user);
+    return this.labService.findOneForViewer(id, actor);
   }
 
   @Put(':id')
@@ -150,14 +175,29 @@ export class LabController {
     return this.labService.updateRules(id, actor, dto?.rules ?? null);
   }
 
+  @Put(':id/publish-status')
+  async updatePublishStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdatePublishStatusDto,
+  ) {
+    const actor = await this.getActor(req.user);
+    return this.labService.updatePublishStatus(id, actor, dto?.publishStatus);
+  }
+
   @Post(':id/validate')
   async validateCircuit(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: StudentCircuitDto,
   ) {
-    const actor = dto?.debug === true ? await this.getActor(req.user) : null;
-    return this.labAttemptService.validate(id, dto, actor ?? undefined);
+    const actor = await this.getActor(req.user);
+    await this.labService.assertVisibleTo(id, actor);
+    return this.labAttemptService.validate(
+      id,
+      dto,
+      dto?.debug === true ? actor : undefined,
+    );
   }
 
   /** The instructor's circuit as the grader sees it (instructors only). */
@@ -176,8 +216,9 @@ export class LabController {
     @Param('id') id: string,
     @Body() dto: StudentCircuitDto,
   ) {
-    const userId = await this.getDbUserId(req.user);
-    return this.labAttemptService.submit(id, userId, dto);
+    const actor = await this.getActor(req.user);
+    await this.labService.assertVisibleTo(id, actor);
+    return this.labAttemptService.submit(id, actor.userId, dto);
   }
 
   @Get(':id/attempts/me')
@@ -187,6 +228,34 @@ export class LabController {
   ) {
     const userId = await this.getDbUserId(req.user);
     return this.labAttemptService.findMine(id, userId);
+  }
+
+  // Drafts are always the caller's own: the user id comes from the token.
+  @Put(':id/draft')
+  async saveDraft(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SaveLabDraftDto,
+  ) {
+    const actor = await this.getActor(req.user);
+    const userId = await this.requireStudent(req.user);
+    await this.labService.assertVisibleTo(id, actor);
+    return this.labDraftService.save(id, userId, dto);
+  }
+
+  @Get(':id/draft/me')
+  async findMyDraft(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.findMine(id, userId);
+  }
+
+  @Delete(':id/draft/me')
+  async deleteMyDraft(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.deleteMine(id, userId);
   }
 
   @Delete(':id')

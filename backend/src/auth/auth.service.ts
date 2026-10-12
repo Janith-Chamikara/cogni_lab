@@ -39,12 +39,27 @@ export class AuthService {
     return clerkUser.username ?? `clerk_${clerkUser.id}`;
   }
 
+  /** The role from Clerk publicMetadata, once onboarding is complete. */
+  private getOnboardedUserType(
+    metadata: Record<string, unknown> | undefined,
+  ): UserType | undefined {
+    if (metadata?.onboardingComplete !== true) return undefined;
+    const role = metadata.role;
+    return typeof role === 'string' &&
+      Object.values(UserType).includes(role as UserType)
+      ? (role as UserType)
+      : undefined;
+  }
+
   async syncClerkUser(clerkUser: ClerkUser) {
     const email = clerkUser.emailAddresses?.[0]?.emailAddress ?? null;
     const fullName =
       [clerkUser.firstName, clerkUser.lastName].filter(Boolean).join(' ') ||
       null;
     const username = clerkUser.username ?? `clerk_${clerkUser.id}`;
+    // Keep userType in step with the onboarding role, so it does not depend
+    // on the webhook alone.
+    const userType = this.getOnboardedUserType(clerkUser.publicMetadata);
 
     if (!email) {
       return null;
@@ -70,6 +85,7 @@ export class AuthService {
           email,
           fullName,
           username,
+          ...(userType && { userType }),
           lastLogin: new Date(),
         },
       });
@@ -82,11 +98,13 @@ export class AuthService {
         email,
         fullName,
         username,
+        ...(userType && { userType }),
       },
       update: {
         email,
         fullName,
         username,
+        ...(userType && { userType }),
         lastLogin: new Date(),
       },
     });

@@ -25,6 +25,8 @@ const tools = {
   }),
 } as unknown as AiToolsService;
 
+const student = { userId: 'u1', isInstructor: false, isAdmin: false };
+
 const context = parseProgressFeedbackRequest({
   context: {
     labId: 'lab-1',
@@ -57,7 +59,10 @@ describe('AiService.progressFeedback', () => {
     });
     global.fetch = fetchMock as unknown as typeof fetch;
 
-    const result = await new AiService(tools).progressFeedback(context);
+    const result = await new AiService(tools).progressFeedback(
+      context,
+      student,
+    );
 
     expect(result).toEqual({
       reply: 'R2 and R3 need to share nodes.',
@@ -76,7 +81,7 @@ describe('AiService.progressFeedback', () => {
   it('reports when AI is not configured', async () => {
     delete process.env.OPENROUTER_API_KEY;
     await expect(
-      new AiService(tools).progressFeedback(context),
+      new AiService(tools).progressFeedback(context, student),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 

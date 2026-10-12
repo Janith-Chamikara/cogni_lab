@@ -14,7 +14,7 @@ const EMAIL = /^[^\s@<>()]+@[^\s@<>()]+\.[^\s@<>()]+$/;
 export const instructorName = (instructor: LabInstructor) =>
   instructor.fullName?.trim() || "Your instructor";
 
-const initialsOf = (name: string) =>
+export const initialsOf = (name: string) =>
   name
     .split(/\s+/)
     .filter(Boolean)

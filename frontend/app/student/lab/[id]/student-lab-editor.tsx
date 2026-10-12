@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 import {
   ChevronLeft,
   Cable,
@@ -20,6 +21,8 @@ import {
   PanelRightOpen,
   History,
   RotateCcw,
+  Save,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,14 +39,17 @@ import type {
   Lab,
   ExperimentStep,
   LabAttempt,
+  LabDraft,
   StudentAction,
   StudentCircuitPayload,
   ValidationResult,
   WireConnection,
 } from "@/lib/types";
 import {
+  deleteLabDraft,
   getMyLabAttempts,
   getProgressFeedback,
+  saveLabDraft,
   submitLabAttempt,
   validateLabCircuit,
 } from "@/lib/actions";
@@ -156,15 +162,75 @@ const circuitFromSubmission = (stored: unknown, placements: LabPlacement[]) => {
   return { components, connections };
 };
 
+/** The canvas as the API expects it (submissions and drafts). */
+const toCircuitPayload = (
+  placedEquipments: StudentCircuitPayload["components"],
+  wireConnections: StudentCircuitPayload["connections"],
+): StudentCircuitPayload => ({
+  components: placedEquipments.map((eq) => ({
+    id: eq.id,
+    equipmentId: eq.equipmentId,
+    labEquipmentId: eq.labEquipmentId,
+    positionX: eq.positionX,
+    positionY: eq.positionY,
+  })),
+  connections: wireConnections.map((conn) => ({
+    sourceEquipmentId: conn.sourceEquipmentId,
+    targetEquipmentId: conn.targetEquipmentId,
+    sourceHandle: conn.sourceHandle,
+    targetHandle: conn.targetHandle,
+    wireColor: conn.wireColor,
+  })),
+  // Steps are instructions only and are not graded.
+  completedStepIds: [],
+});
+
+const AUTOSAVE_INTERVAL_MS = 60_000;
+
+const formatSavedAt = (iso: string) =>
+  new Date(iso).toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+
 interface StudentLabEditorProps {
   lab: Lab;
+  /** The student's saved draft, loaded before the canvas opens. */
+  initialDraft?: LabDraft | null;
 }
 
-export function StudentLabEditor({ lab }: StudentLabEditorProps) {
+export function StudentLabEditor({
+  lab,
+  initialDraft = null,
+}: StudentLabEditorProps) {
   const router = useRouter();
-  const [currentStepIndex, setCurrentStepIndex] = React.useState(0);
-  const [placedEquipments, setPlacedEquipments] = React.useState<any[]>([]);
-  const [wireConnections, setWireConnections] = React.useState<any[]>([]);
+  // Drafts are a student feature; the API rejects other roles.
+  const { user } = useUser();
+  const canSaveDraft = user?.publicMetadata?.role === "STUDENT";
+  // Open order: saved draft, then the last submission (below), then empty.
+  const [restoredDraft] = React.useState(() => {
+    if (!initialDraft) return null;
+    const circuit = circuitFromSubmission(
+      initialDraft.circuit,
+      lab.labEquipments || [],
+    );
+    if (circuit.components.length === 0) return null;
+    const lastStep = Math.max((lab.experimentSteps?.length ?? 1) - 1, 0);
+    return {
+      ...circuit,
+      stepIndex: Math.min(Math.max(initialDraft.currentStepIndex, 0), lastStep),
+      savedAt: initialDraft.updatedAt,
+    };
+  });
+  const [currentStepIndex, setCurrentStepIndex] = React.useState(
+    restoredDraft?.stepIndex ?? 0,
+  );
+  const [placedEquipments, setPlacedEquipments] = React.useState<any[]>(
+    restoredDraft?.components ?? [],
+  );
+  const [wireConnections, setWireConnections] = React.useState<any[]>(
+    restoredDraft?.connections ?? [],
+  );
   const [isWireMode, setIsWireMode] = React.useState(false);
   const [selectedWireColor, setSelectedWireColor] = React.useState<string>(
     WIRE_COLORS[0]?.value ?? "#374151",
@@ -205,10 +271,36 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
   // When the canvas shows the last submission: its submission time.
   const [restoredFrom, setRestoredFrom] = React.useState<string | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = React.useState(false);
+  // When the canvas was last saved as a draft.
+  const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(
+    restoredDraft?.savedAt ?? null,
+  );
+  const [isSavingDraft, setIsSavingDraft] = React.useState(false);
+  const [isLeaveConfirmOpen, setIsLeaveConfirmOpen] = React.useState(false);
+  // Changed since the last draft save. Unlike userTouchedRef it also covers
+  // moves and step changes, and it is cleared after each save.
+  const dirtyRef = React.useRef(false);
+  // The save in flight, so submit and reset can wait for it.
+  const savePromiseRef = React.useRef<Promise<unknown> | null>(null);
+  const isSubmittingRef = React.useRef(false);
+  // Latest canvas for the autosave timer, which outlives renders.
+  const latestCanvasRef = React.useRef({
+    placedEquipments,
+    wireConnections,
+    currentStepIndex,
+  });
+  React.useEffect(() => {
+    latestCanvasRef.current = {
+      placedEquipments,
+      wireConnections,
+      currentStepIndex,
+    };
+  }, [placedEquipments, wireConnections, currentStepIndex]);
 
   const logAction = React.useCallback(
     (action: Omit<StudentAction, "timestamp">) => {
       userTouchedRef.current = true;
+      dirtyRef.current = true;
       setRestoredFrom(null);
       actionLogRef.current.push({
         ...action,
@@ -225,7 +317,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
       if (!result.data) return;
       setBestAttempt(result.data.bestAttempt);
       const latest = result.data.latestSubmission;
-      if (!latest || userTouchedRef.current) return;
+      if (!latest || userTouchedRef.current || restoredDraft) return;
       const restored = circuitFromSubmission(
         latest.circuit,
         lab.labEquipments || [],
@@ -235,7 +327,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
       setWireConnections(restored.connections);
       setRestoredFrom(latest.submittedAt);
     });
-  }, [lab.id, lab.labEquipments]);
+  }, [lab.id, lab.labEquipments, restoredDraft]);
 
   const steps = lab.experimentSteps || [];
   const totalSteps = steps.length;
@@ -290,6 +382,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
 
   const handleEquipmentMove = React.useCallback(
     (index: number, x: number, y: number) => {
+      dirtyRef.current = true;
       setPlacedEquipments((prev) =>
         prev.map((eq, i) =>
           i === index ? { ...eq, positionX: x, positionY: y } : eq,
@@ -335,28 +428,71 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
     [wireConnections, logAction],
   );
 
-  const handleExitLab = () => {
-    router.push("/student/dashboard");
+  const goToStep = (index: number) => {
+    if (index !== currentStepIndex) dirtyRef.current = true;
+    setCurrentStepIndex(index);
   };
 
-  const buildPayload = (): StudentCircuitPayload => ({
-    components: placedEquipments.map((eq) => ({
-      id: eq.id,
-      equipmentId: eq.equipmentId,
-      labEquipmentId: eq.labEquipmentId,
-      positionX: eq.positionX,
-      positionY: eq.positionY,
-    })),
-    connections: wireConnections.map((conn) => ({
-      sourceEquipmentId: conn.sourceEquipmentId,
-      targetEquipmentId: conn.targetEquipmentId,
-      sourceHandle: conn.sourceHandle,
-      targetHandle: conn.targetHandle,
-      wireColor: conn.wireColor,
-    })),
-    // Steps are instructions only and are not graded.
-    completedStepIds: [],
-  });
+  /**
+   * Save the canvas as the student's draft. An empty canvas is never saved.
+   * Returns false if the save failed.
+   */
+  const saveDraft = React.useCallback(async () => {
+    if (!canSaveDraft) return true;
+    // One save at a time; changes made meanwhile go in this one.
+    if (savePromiseRef.current) await savePromiseRef.current;
+
+    const canvas = latestCanvasRef.current;
+    if (canvas.placedEquipments.length === 0) return true;
+
+    dirtyRef.current = false;
+    setIsSavingDraft(true);
+    const request = saveLabDraft(lab.id, {
+      ...toCircuitPayload(canvas.placedEquipments, canvas.wireConnections),
+      currentStepIndex: canvas.currentStepIndex,
+    });
+    savePromiseRef.current = request;
+    const result = await request;
+    savePromiseRef.current = null;
+    setIsSavingDraft(false);
+
+    if (result.error || !result.data) {
+      // Keep the changes marked so the next autosave tries again.
+      dirtyRef.current = true;
+      setRequestError(result.error ?? "Failed to save your draft.");
+      return false;
+    }
+    setDraftSavedAt(result.data.updatedAt);
+    return true;
+  }, [canSaveDraft, lab.id]);
+
+  // Autosave once a minute, only when something changed since the last save.
+  React.useEffect(() => {
+    if (!canSaveDraft) return;
+    const timer = setInterval(() => {
+      if (dirtyRef.current && !isSubmittingRef.current) void saveDraft();
+    }, AUTOSAVE_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [canSaveDraft, saveDraft]);
+
+  const leaveLab = () => router.push("/student/dashboard");
+
+  const handleExitLab = () => {
+    if (canSaveDraft && dirtyRef.current && placedEquipments.length > 0) {
+      setIsLeaveConfirmOpen(true);
+      return;
+    }
+    leaveLab();
+  };
+
+  const handleSaveAndExit = async () => {
+    setRequestError(null);
+    if (dirtyRef.current && !(await saveDraft())) return;
+    leaveLab();
+  };
+
+  const buildPayload = () =>
+    toCircuitPayload(placedEquipments, wireConnections);
 
   const handleCheckProgress = async () => {
     setIsChecking(true);
@@ -394,17 +530,24 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    isSubmittingRef.current = true;
     setRequestError(null);
+    // A save landing after the submit would bring the draft back.
+    if (savePromiseRef.current) await savePromiseRef.current;
     const result = await submitLabAttempt(lab.id, {
       ...buildPayload(),
       actionLog: actionLogRef.current,
     });
     setIsSubmitting(false);
+    isSubmittingRef.current = false;
 
     if (result.error || !result.data) {
       setRequestError(result.error ?? "Failed to submit your lab.");
       return;
     }
+    // The server deletes the draft when an attempt is submitted.
+    setDraftSavedAt(null);
+    dirtyRef.current = false;
     setValidationResult(result.data.result);
     setBestAttempt(result.data.bestAttempt);
     setResultSource("submit");
@@ -416,14 +559,21 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
   };
 
   // Start over with an empty canvas (after confirmation). Submitted
-  // attempts are kept.
-  const handleReset = () => {
+  // attempts are kept; the saved draft is deleted.
+  const handleReset = async () => {
     userTouchedRef.current = true;
+    dirtyRef.current = false;
     setPlacedEquipments([]);
     setWireConnections([]);
     setRestoredFrom(null);
+    setDraftSavedAt(null);
     setShowValidation(false);
     actionLogRef.current = [];
+
+    if (!canSaveDraft) return;
+    if (savePromiseRef.current) await savePromiseRef.current;
+    const result = await deleteLabDraft(lab.id);
+    if (result.error) setRequestError(result.error);
   };
 
   const resultChecks = validationResult
@@ -565,6 +715,23 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
               <ChevronLeft className="mr-1 h-4 w-4" />
               Back
             </Button>
+            {canSaveDraft && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveAndExit}
+                disabled={isSavingDraft || isSubmitting}
+                className="shrink-0"
+                title="Save your work and return to the dashboard"
+              >
+                {isSavingDraft ? (
+                  <Loader2 className="h-4 w-4 animate-spin sm:mr-1" />
+                ) : (
+                  <Save className="h-4 w-4 sm:mr-1" />
+                )}
+                <span className="hidden sm:inline">Save &amp; exit</span>
+              </Button>
+            )}
             <Separator orientation="vertical" className="h-6" />
             <div className="min-w-0">
               <h1
@@ -689,7 +856,7 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                                 ? "border-primary/60 bg-primary/5"
                                 : "border-transparent hover:bg-muted"
                             }`}
-                            onClick={() => setCurrentStepIndex(index)}
+                            onClick={() => goToStep(index)}
                             aria-current={isCurrent ? "step" : undefined}
                           >
                             <span
@@ -832,11 +999,18 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                   title="This is the circuit you last submitted. Edit it to try again, or Reset to start over."
                 >
                   <History className="h-3.5 w-3.5" />
-                  Your last submission ·{" "}
-                  {new Date(restoredFrom).toLocaleString(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
+                  Your last submission · {formatSavedAt(restoredFrom)}
+                </span>
+              )}
+              {!restoredFrom && (isSavingDraft || draftSavedAt) && (
+                <span
+                  className="mr-1 hidden items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground md:flex"
+                  title="Your work is saved automatically every minute while you make changes."
+                >
+                  <Save className="h-3.5 w-3.5" />
+                  {isSavingDraft || !draftSavedAt
+                    ? "Saving draft…"
+                    : `Saved draft · ${formatSavedAt(draftSavedAt)}`}
                 </span>
               )}
               <Button
@@ -907,11 +1081,21 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
         open={isResetConfirmOpen}
         onOpenChange={setIsResetConfirmOpen}
         title="Start this lab again?"
-        description="This clears every part and wire from the canvas. Your submitted attempts and your validated result are kept."
+        description="This clears every part and wire from the canvas and deletes your saved draft. Your submitted attempts and your validated result are kept."
         confirmLabel="Clear canvas"
         destructive
         icon={RotateCcw}
         onConfirm={handleReset}
+      />
+      <ConfirmDialog
+        open={isLeaveConfirmOpen}
+        onOpenChange={setIsLeaveConfirmOpen}
+        title="Leave without saving?"
+        description="You have changes that are not saved yet. Use Save & exit to keep them, or leave and lose them."
+        confirmLabel="Leave without saving"
+        cancelLabel="Stay"
+        destructive
+        onConfirm={leaveLab}
       />
     </div>
   );

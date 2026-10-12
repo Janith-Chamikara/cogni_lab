@@ -2,6 +2,7 @@ import {
   getFollowedLabs,
   getLabEquipments,
   getModules,
+  getMyDraftSummary,
   getMyAttemptSummary,
   getPublishedLabs,
 } from "@/lib/actions";
@@ -14,12 +15,14 @@ export default async function StudentDashboardPage() {
     equipmentResult,
     attemptsResult,
     followedLabsResult,
+    draftsResult,
   ] = await Promise.all([
     getPublishedLabs(),
     getModules(),
     getLabEquipments(),
     getMyAttemptSummary(),
     getFollowedLabs(),
+    getMyDraftSummary(),
   ]);
 
   return (
@@ -29,6 +32,7 @@ export default async function StudentDashboardPage() {
       initialEquipment={equipmentResult.data ?? []}
       attemptSummary={attemptsResult.data ?? []}
       followedLabs={followedLabsResult.data ?? []}
+      draftSummary={draftsResult.data ?? []}
     />
   );
 }

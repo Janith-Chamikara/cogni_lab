@@ -254,3 +254,10 @@ export class StudentCircuitDto {
   @IsBoolean()
   debug?: boolean;
 }
+
+/** A student's unsubmitted circuit plus the step they were on. */
+export class SaveLabDraftDto extends StudentCircuitDto {
+  @IsOptional()
+  @IsNumber()
+  currentStepIndex?: number;
+}

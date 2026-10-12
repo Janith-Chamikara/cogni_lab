@@ -46,6 +46,7 @@ model User {
   createdEquipments   LabEquipment[]
   experimentProgress  ExperimentProgress[]
   labAttempts         LabAttempt[]
+  labDrafts           LabDraft[]
   following           InstructorFollow[] @relation("StudentFollows")
   followers           InstructorFollow[] @relation("InstructorFollowers")
 
@@ -93,6 +94,7 @@ model LabInstance {
   labEquipments LabInstanceEquipment[]
   wireConnections WireConnection[]
   labAttempts     LabAttempt[]
+  labDrafts       LabDraft[]
 
   @@map("lab_instances")
 }
@@ -234,4 +236,23 @@ model InstructorFollow {
   @@unique([studentId, instructorId])
   @@index([instructorId])
   @@map("instructor_follows")
+}
+
+// A student's unsubmitted work on a lab: one per student per lab, overwritten
+// on each save and deleted when they submit.
+model LabDraft {
+  id               String   @id @default(uuid())
+  labId            String
+  userId           String
+  circuitStateJson Json
+  currentStepIndex Int      @default(0)
+  updatedAt        DateTime @updatedAt
+
+  // Relations
+  lab              LabInstance @relation(fields: [labId], references: [id], onDelete: Cascade)
+  user             User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([labId, userId])
+  @@index([userId])
+  @@map("lab_drafts")
 }

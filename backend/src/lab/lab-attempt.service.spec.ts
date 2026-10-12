@@ -80,10 +80,13 @@ const makePrisma = (lab: unknown) => {
       ...data,
     })),
     findAttempts: jest.fn().mockResolvedValue([]),
+    deleteDrafts: jest.fn().mockResolvedValue({ count: 1 }),
   };
   const prisma = {
     labInstance: { findUnique: mocks.findUniqueLab, update: mocks.updateLab },
     labAttempt: { create: mocks.createAttempt, findMany: mocks.findAttempts },
+    labDraft: { deleteMany: mocks.deleteDrafts },
+    $transaction: jest.fn((operations: unknown[]) => Promise.all(operations)),
   } as unknown as PrismaService;
   return { prisma, mocks };
 };
@@ -129,6 +132,9 @@ describe('LabAttemptService', () => {
 
     expect(result.passed).toBe(false);
     expect(mocks.createAttempt).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteDrafts).toHaveBeenCalledWith({
+      where: { labId: 'lab-1', userId: 'student-1' },
+    });
     expect(attempt).toMatchObject({
       labId: 'lab-1',
       userId: 'student-1',

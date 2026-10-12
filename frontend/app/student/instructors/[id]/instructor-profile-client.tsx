@@ -5,7 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, FlaskConical, GraduationCap, Mail, Users } from "lucide-react";
 
-import type { InstructorProfile, LabAttemptSummary } from "@/lib/types";
+import type {
+  InstructorProfile,
+  LabAttemptSummary,
+  LabDraftSummary,
+} from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -25,11 +29,13 @@ import { shownFollowerCount } from "../instructors-client";
 interface InstructorProfileClientProps {
   profile: InstructorProfile;
   attemptSummary: LabAttemptSummary[];
+  draftSummary: LabDraftSummary[];
 }
 
 export function InstructorProfileClient({
   profile,
   attemptSummary,
+  draftSummary,
 }: InstructorProfileClientProps) {
   const router = useRouter();
   const [following, setFollowing] = React.useState(profile.isFollowing);
@@ -39,6 +45,10 @@ export function InstructorProfileClient({
   const attemptsByLab = React.useMemo(
     () => new Map(attemptSummary.map((summary) => [summary.labId, summary])),
     [attemptSummary],
+  );
+  const draftsByLab = React.useMemo(
+    () => new Map(draftSummary.map((draft) => [draft.labId, draft])),
+    [draftSummary],
   );
 
   return (
@@ -123,6 +133,7 @@ export function InstructorProfileClient({
                     key={lab.id}
                     lab={lab}
                     summary={attemptsByLab.get(lab.id)}
+                    draft={draftsByLab.get(lab.id)}
                     onStart={() => router.push(`/student/lab/${lab.id}`)}
                   />
                 ))}

@@ -30,6 +30,9 @@ import {
   InstructorSummary,
   InstructorProfile,
   FollowStatus,
+  LabDraft,
+  LabDraftSummary,
+  SaveLabDraftPayload,
 } from "./types";
 
 const getAuthToken = async () => {
@@ -643,6 +646,7 @@ export const submitLabAttempt = async (
       },
     );
 
+    revalidatePath("/student/dashboard");
     return { data: response.data };
   } catch (error) {
     console.error(error);
@@ -806,5 +810,95 @@ export const unfollowInstructor = async (
   } catch (error) {
     console.error(error);
     return { error: getErrorMessage(error, "Failed to unfollow instructor.") };
+  }
+};
+
+export const getMyLabDraft = async (
+  id: string,
+): Promise<ActionResult<LabDraft | null>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to load your draft." };
+    }
+
+    const response = await api.get<LabDraft | "">(`/labs/${id}/draft/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    // No draft comes back as an empty body.
+    return { data: response.data || null };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load your draft.") };
+  }
+};
+
+export const saveLabDraft = async (
+  id: string,
+  payload: SaveLabDraftPayload,
+): Promise<ActionResult<Omit<LabDraft, "circuit">>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to save your draft." };
+    }
+
+    const response = await api.put<Omit<LabDraft, "circuit">>(
+      `/labs/${id}/draft`,
+      payload,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    revalidatePath("/student/dashboard");
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to save your draft.") };
+  }
+};
+
+export const deleteLabDraft = async (
+  id: string,
+): Promise<ActionResult<void>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to delete your draft." };
+    }
+
+    await api.delete(`/labs/${id}/draft/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    revalidatePath("/student/dashboard");
+    return {};
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to delete your draft.") };
+  }
+};
+
+export const getMyDraftSummary = async (): Promise<
+  ActionResult<LabDraftSummary[]>
+> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to view your drafts." };
+    }
+
+    const response = await api.get<LabDraftSummary[]>("/labs/my-drafts", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to load your drafts.") };
   }
 };

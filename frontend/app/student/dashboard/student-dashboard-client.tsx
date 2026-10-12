@@ -33,6 +33,7 @@ import type {
   Module,
   LabEquipment,
   LabAttemptSummary,
+  LabDraftSummary,
   LabInstructor,
 } from "@/lib/types";
 import {
@@ -65,6 +66,8 @@ interface StudentDashboardClientProps {
   attemptSummary: LabAttemptSummary[];
   /** Labs from the instructors the student follows. */
   followedLabs: Lab[];
+  /** Labs the student has a saved draft for. */
+  draftSummary: LabDraftSummary[];
 }
 
 /** Shows the student's best result for a lab, if they have submitted it. */
@@ -91,10 +94,13 @@ const statusOf = (summary?: LabAttemptSummary): LabStatusFilter =>
 export function LabCard({
   lab,
   summary,
+  draft,
   onStart,
 }: {
   lab: Lab;
   summary?: LabAttemptSummary;
+  /** The student's saved draft for this lab, if any. */
+  draft?: LabDraftSummary;
   onStart: () => void;
 }) {
   // The lab list sends counts; a single lab sends the full lists.
@@ -134,16 +140,25 @@ export function LabCard({
           </div>
         )}
       </CardContent>
-      <CardFooter>
+      <CardFooter className="flex-col gap-1.5">
         <Button
           className="w-full"
           onClick={onStart}
           data-ai-action="navigate"
           data-ai-href={`/student/lab/${lab.id}`}
-          data-ai-label={`Open ${lab.labName}`}
+          data-ai-label={`${draft ? "Continue" : "Open"} ${lab.labName}`}
         >
-          Start Experiment
+          {draft ? "Continue" : "Start Experiment"}
         </Button>
+        {draft && (
+          <p className="text-xs text-muted-foreground">
+            Draft saved{" "}
+            {new Date(draft.updatedAt).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </p>
+        )}
       </CardFooter>
     </Card>
   );
@@ -155,6 +170,7 @@ export function StudentDashboardClient({
   initialEquipment,
   attemptSummary,
   followedLabs,
+  draftSummary,
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -200,6 +216,11 @@ export function StudentDashboardClient({
         ),
       );
   }, [initialLabs, searchQuery]);
+
+  const draftsByLab = React.useMemo(
+    () => new Map(draftSummary.map((draft) => [draft.labId, draft])),
+    [draftSummary],
+  );
 
   // Only count attempts for labs that are still listed.
   const attemptsByLab = React.useMemo(() => {
@@ -463,6 +484,7 @@ export function StudentDashboardClient({
                         key={lab.id}
                         lab={lab}
                         summary={attemptsByLab.get(lab.id)}
+                        draft={draftsByLab.get(lab.id)}
                         onStart={() => handleStartLab(lab.id)}
                       />
                     ))}
@@ -502,6 +524,7 @@ export function StudentDashboardClient({
                         key={lab.id}
                         lab={lab}
                         summary={attemptsByLab.get(lab.id)}
+                        draft={draftsByLab.get(lab.id)}
                         onStart={() => handleStartLab(lab.id)}
                       />
                     ))}
@@ -570,6 +593,7 @@ export function StudentDashboardClient({
                         key={lab.id}
                         lab={lab}
                         summary={attemptsByLab.get(lab.id)}
+                        draft={draftsByLab.get(lab.id)}
                         onStart={() => handleStartLab(lab.id)}
                       />
                     ))}

@@ -8,11 +8,13 @@ import {
   Body,
   Req,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { User as ClerkUser } from '@clerk/backend';
 import { LabService } from './lab.service';
 import { LabAttemptService } from './lab-attempt.service';
+import { LabDraftService } from './lab-draft.service';
 import {
   CreateLabDto,
   UpdateLabDto,
@@ -21,6 +23,7 @@ import {
   UpdateWireConnectionsDto,
   UpdateCircuitRulesDto,
   StudentCircuitDto,
+  SaveLabDraftDto,
 } from './dto/lab.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -33,6 +36,7 @@ export class LabController {
   constructor(
     private readonly labService: LabService,
     private readonly labAttemptService: LabAttemptService,
+    private readonly labDraftService: LabDraftService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -71,7 +75,19 @@ export class LabController {
       userId: user.id,
       isAdmin,
       isInstructor: isAdmin || role === 'INSTRUCTOR',
+      isStudent: role === 'STUDENT',
     };
+  }
+
+  /** Drafts belong to students; returns the student's local user id. */
+  private async requireStudent(clerkUser: ClerkUser): Promise<string> {
+    const actor = await this.getActor(clerkUser);
+
+    if (!actor.isStudent) {
+      throw new ForbiddenException('Only students can save lab drafts');
+    }
+
+    return actor.userId;
   }
 
   @Post()
@@ -102,6 +118,13 @@ export class LabController {
   async findMyAttemptSummary(@Req() req: AuthenticatedRequest) {
     const userId = await this.getDbUserId(req.user);
     return this.labAttemptService.findMySummary(userId);
+  }
+
+  // Declared before ':id' so "my-drafts" is not treated as a lab id.
+  @Get('my-drafts')
+  async findMyDraftSummary(@Req() req: AuthenticatedRequest) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.findMySummary(userId);
   }
 
   @Get('module/:moduleId')
@@ -187,6 +210,32 @@ export class LabController {
   ) {
     const userId = await this.getDbUserId(req.user);
     return this.labAttemptService.findMine(id, userId);
+  }
+
+  // Drafts are always the caller's own: the user id comes from the token.
+  @Put(':id/draft')
+  async saveDraft(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: SaveLabDraftDto,
+  ) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.save(id, userId, dto);
+  }
+
+  @Get(':id/draft/me')
+  async findMyDraft(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.findMine(id, userId);
+  }
+
+  @Delete(':id/draft/me')
+  async deleteMyDraft(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+  ) {
+    const userId = await this.requireStudent(req.user);
+    return this.labDraftService.deleteMine(id, userId);
   }
 
   @Delete(':id')

@@ -410,6 +410,24 @@ export type SubmitAttemptResult = {
 };
 
 /** A student's result for one lab, based on their best attempt. */
+/** A student's saved, unsubmitted work on a lab. */
+export type LabDraft = {
+  labId: string;
+  /** Same shape as a submission's circuit. */
+  circuit: unknown;
+  currentStepIndex: number;
+  updatedAt: string;
+};
+
+export type LabDraftSummary = {
+  labId: string;
+  updatedAt: string;
+};
+
+export type SaveLabDraftPayload = StudentCircuitPayload & {
+  currentStepIndex: number;
+};
+
 export type LabAttemptSummary = {
   labId: string;
   attemptCount: number;

@@ -33,6 +33,7 @@ import {
   LabDraft,
   LabDraftSummary,
   SaveLabDraftPayload,
+  LabPublishStatus,
 } from "./types";
 
 const getAuthToken = async () => {
@@ -310,7 +311,7 @@ export const getPublishedLabs = async (): Promise<ActionResult<Lab[]>> => {
   try {
     const token = await getAuthToken();
 
-    // Get all labs - in a real app, you'd filter for published labs
+    // The server only returns published labs.
     const response = await api.get<Lab[]>("/labs", {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
@@ -900,5 +901,34 @@ export const getMyDraftSummary = async (): Promise<
   } catch (error) {
     console.error(error);
     return { error: getErrorMessage(error, "Failed to load your drafts.") };
+  }
+};
+
+export const updateLabPublishStatus = async (
+  id: string,
+  publishStatus: LabPublishStatus,
+): Promise<ActionResult<{ id: string; publishStatus: LabPublishStatus }>> => {
+  try {
+    const token = await getAuthToken();
+
+    if (!token) {
+      return { error: "You must be signed in to publish a lab." };
+    }
+
+    const response = await api.put<{
+      id: string;
+      publishStatus: LabPublishStatus;
+    }>(
+      `/labs/${id}/publish-status`,
+      { publishStatus },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    revalidatePath("/dashboard");
+    revalidatePath("/student/dashboard");
+    return { data: response.data };
+  } catch (error) {
+    console.error(error);
+    return { error: getErrorMessage(error, "Failed to update lab status.") };
   }
 };

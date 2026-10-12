@@ -61,6 +61,9 @@ export type CreateModulePayload = {
 // Lab types
 export type LabStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
+/** Who can see a lab: students only see PUBLISHED labs. */
+export type LabPublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
 export type EquipmentPlacement = {
   id?: string;
   equipmentId: string;
@@ -132,6 +135,7 @@ export type Lab = {
   toleranceUnit?: string | null;
   circuitRulesJson?: CircuitRules | null;
   completionStatus: LabStatus;
+  publishStatus: LabPublishStatus;
   createdAt: string;
   updatedAt: string;
   instructor?: LabInstructor;
@@ -155,6 +159,8 @@ export type CreateLabPayload = {
   labName: string;
   description?: string;
   category?: string;
+  /** Defaults to DRAFT on the server. */
+  publishStatus?: LabPublishStatus;
   toleranceMin?: number;
   toleranceMax?: number;
   toleranceUnit?: string;

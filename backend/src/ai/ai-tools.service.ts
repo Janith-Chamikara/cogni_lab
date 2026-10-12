@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { LabService } from '../lab/lab.service';
+import { LabService, type LabActor } from '../lab/lab.service';
 import { LabAttemptService } from '../lab/lab-attempt.service';
 import { asRecord } from '../circuit-validation/circuit-rules';
 import { buildStudentCircuit } from '../circuit-validation/lab-circuit.adapter';
@@ -94,8 +94,11 @@ export class AiToolsService {
     private readonly attempts: LabAttemptService,
   ) {}
 
-  async prepare(context: AiContext) {
-    const lab = context.labId ? await this.labs.findOne(context.labId) : null;
+  /** `viewer` decides which labs may be read (students: published only). */
+  async prepare(context: AiContext, viewer: LabActor) {
+    const lab = context.labId
+      ? await this.labs.findOneForViewer(context.labId, viewer)
+      : null;
     const placements = lab?.labEquipments ?? [];
     if (context.workspace) {
       for (const component of context.workspace.components) {

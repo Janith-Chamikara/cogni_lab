@@ -143,14 +143,17 @@ describe('FollowService', () => {
     });
   });
 
-  it('findFollowedLabs filters labs by the student follows', async () => {
+  it('findFollowedLabs only returns published labs from followed instructors', async () => {
     prisma.labInstance.findMany.mockResolvedValue([]);
 
     await service.findFollowedLabs('s1');
 
     expect(prisma.labInstance.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { instructor: { followers: { some: { studentId: 's1' } } } },
+        where: {
+          publishStatus: 'PUBLISHED',
+          instructor: { followers: { some: { studentId: 's1' } } },
+        },
       }),
     );
   });

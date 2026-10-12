@@ -24,6 +24,7 @@ import {
   UpdateCircuitRulesDto,
   StudentCircuitDto,
   SaveLabDraftDto,
+  UpdatePublishStatusDto,
 } from './dto/lab.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -133,8 +134,9 @@ export class LabController {
   }
 
   @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.labService.findOne(id);
+  async findOne(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
+    const actor = await this.getActor(req.user);
+    return this.labService.findOneForViewer(id, actor);
   }
 
   @Put(':id')
@@ -173,14 +175,29 @@ export class LabController {
     return this.labService.updateRules(id, actor, dto?.rules ?? null);
   }
 
+  @Put(':id/publish-status')
+  async updatePublishStatus(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() dto: UpdatePublishStatusDto,
+  ) {
+    const actor = await this.getActor(req.user);
+    return this.labService.updatePublishStatus(id, actor, dto?.publishStatus);
+  }
+
   @Post(':id/validate')
   async validateCircuit(
     @Req() req: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: StudentCircuitDto,
   ) {
-    const actor = dto?.debug === true ? await this.getActor(req.user) : null;
-    return this.labAttemptService.validate(id, dto, actor ?? undefined);
+    const actor = await this.getActor(req.user);
+    await this.labService.assertVisibleTo(id, actor);
+    return this.labAttemptService.validate(
+      id,
+      dto,
+      dto?.debug === true ? actor : undefined,
+    );
   }
 
   /** The instructor's circuit as the grader sees it (instructors only). */
@@ -199,8 +216,9 @@ export class LabController {
     @Param('id') id: string,
     @Body() dto: StudentCircuitDto,
   ) {
-    const userId = await this.getDbUserId(req.user);
-    return this.labAttemptService.submit(id, userId, dto);
+    const actor = await this.getActor(req.user);
+    await this.labService.assertVisibleTo(id, actor);
+    return this.labAttemptService.submit(id, actor.userId, dto);
   }
 
   @Get(':id/attempts/me')
@@ -219,7 +237,9 @@ export class LabController {
     @Param('id') id: string,
     @Body() dto: SaveLabDraftDto,
   ) {
+    const actor = await this.getActor(req.user);
     const userId = await this.requireStudent(req.user);
+    await this.labService.assertVisibleTo(id, actor);
     return this.labDraftService.save(id, userId, dto);
   }
 

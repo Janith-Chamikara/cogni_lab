@@ -20,6 +20,13 @@ enum LabCompletionStatus {
   COMPLETED
 }
 
+// Who can see a lab: students only see PUBLISHED labs.
+enum LabPublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
 enum StepStatus {
   NOT_STARTED
   IN_PROGRESS
@@ -81,6 +88,8 @@ model LabInstance {
   toleranceMax        Decimal?
   toleranceUnit       String?
   completionStatus    LabCompletionStatus @default(NOT_STARTED)
+  // New labs start as drafts; the instructor publishes them from the editor.
+  publishStatus       LabPublishStatus @default(DRAFT)
   // Instructor-defined circuit grading rules. Null means legacy grading.
   circuitRulesJson    Json?
   createdAt          DateTime @default(now())
@@ -96,6 +105,7 @@ model LabInstance {
   labAttempts     LabAttempt[]
   labDrafts       LabDraft[]
 
+  @@index([publishStatus])
   @@map("lab_instances")
 }
 

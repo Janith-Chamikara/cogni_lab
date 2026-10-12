@@ -16,7 +16,12 @@ const instructorSelect = {
   fullName: true,
   email: true,
   university: true,
-  _count: { select: { followers: true, createdLabs: true } },
+  _count: {
+    select: {
+      followers: true,
+      createdLabs: { where: { publishStatus: 'PUBLISHED' } },
+    },
+  },
 } as const;
 
 // Same lab shape as LabService.findAll, so lab cards work unchanged.
@@ -154,7 +159,7 @@ export class FollowService {
 
     const [labs, follow] = await Promise.all([
       this.prisma.labInstance.findMany({
-        where: { instructorId },
+        where: { instructorId, publishStatus: 'PUBLISHED' },
         include: labInclude,
         orderBy: { createdAt: 'desc' },
       }),
@@ -172,7 +177,10 @@ export class FollowService {
   /** Labs from every instructor the student follows, newest first. */
   async findFollowedLabs(studentId: string) {
     return this.prisma.labInstance.findMany({
-      where: { instructor: { followers: { some: { studentId } } } },
+      where: {
+        publishStatus: 'PUBLISHED',
+        instructor: { followers: { some: { studentId } } },
+      },
       include: labInclude,
       orderBy: { createdAt: 'desc' },
     });

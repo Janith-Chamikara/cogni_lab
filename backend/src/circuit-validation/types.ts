@@ -2,7 +2,8 @@
 // The engine is framework-free: it receives plain objects and returns a
 // structured result, so it can be unit-tested without Nest or Prisma.
 
-export type ComponentKind =
+/** Kinds that have a built-in preset (see component-presets.ts). */
+export type BuiltInKind =
   | 'resistor'
   | 'capacitor'
   | 'inductor'
@@ -17,6 +18,12 @@ export type ComponentKind =
   | 'multimeter'
   | 'instrument'
   | 'unknown';
+
+/**
+ * A component kind: a built-in one or any id an equipment creator defines.
+ * Required and placed components only match when their kinds are equal.
+ */
+export type ComponentKind = string;
 
 export type Topology =
   | 'single'
@@ -64,6 +71,105 @@ export interface CircuitRules {
 
 export type TerminalSide = 'left' | 'right' | 'top' | 'bottom';
 
+/** How a branch acts in the circuit. Ammeters conduct, voltmeters do not. */
+export type BranchRole = 'load' | 'voltmeter' | 'ammeter';
+
+/**
+ * A two-terminal path through a component, as the engine uses it. Most
+ * components have one branch; a multimeter or potentiometer has several and
+ * uses the ones that are wired.
+ */
+export interface BranchSpec {
+  id: string;
+  /** Terminal indexes. For polar branches current must enter at [0]. */
+  between: [number, number];
+  polar?: boolean;
+  role?: BranchRole;
+  /** Fingerprint code when it differs from the component's code. */
+  code?: string;
+  /**
+   * Share of the component value carried by this branch: the param's value
+   * (0-1), or one minus it when inverted (potentiometer halves).
+   */
+  share?: { param: string; invert?: boolean };
+}
+
+/** Branches to use when all `whenWired` terminals (indexes) have wires. */
+export interface BranchMode {
+  whenWired: number[];
+  branches: string[];
+}
+
+export type ConfigFieldType = 'number' | 'text' | 'select';
+
+/** A setting shown when a component is configured in a lab. */
+export interface ConfigField {
+  key: string;
+  label: string;
+  type: ConfigFieldType;
+  unit?: string;
+  options?: string[];
+  min?: number;
+  max?: number;
+  default?: number | string;
+}
+
+/** A component definition compiled for the engine (terminal indexes). */
+export interface ComponentSpec {
+  kind: ComponentKind;
+  /** Short prefix used for auto labels, e.g. "R" -> R1, R2. */
+  labelPrefix: string;
+  /** Code used in circuit fingerprints, e.g. "R" -> R:100. */
+  code: string;
+  terminals: TerminalSpec[];
+  branches: BranchSpec[];
+  /** First matching mode picks the branches. No match: every branch. */
+  modes?: BranchMode[];
+  /** Config field that holds the component's primary value. */
+  valueKey?: string;
+  unit?: string;
+  /** Power sources define the ports of the circuit. */
+  isSource?: boolean;
+  /** Index of the positive terminal of a source. */
+  plusTerminal?: number;
+  /** Instruments measure the circuit; they are not part of the load. */
+  isInstrument?: boolean;
+  /** Counts towards the equivalent resistance. */
+  resistive?: boolean;
+  fields: ConfigField[];
+}
+
+export type ComponentRole = 'load' | 'source' | 'instrument';
+
+/**
+ * A component definition as an equipment creator writes it and as it is
+ * stored (LabEquipment.componentSpecJson). Terminals are referenced by id.
+ */
+export interface ComponentDefinition {
+  kind: ComponentKind;
+  labelPrefix: string;
+  code?: string;
+  role: ComponentRole;
+  resistive?: boolean;
+  terminals: TerminalSpec[];
+  /** Sources only: the id of the positive terminal. */
+  positiveTerminal?: string;
+  /** Polar branches: current must enter at `from`. */
+  branches: Array<{
+    id: string;
+    from: string;
+    to: string;
+    polar?: boolean;
+    role?: BranchRole;
+    code?: string;
+    share?: { param: string; invert?: boolean };
+  }>;
+  modes?: Array<{ whenWired: string[]; branches: string[] }>;
+  /** Key of the number field that holds the primary value. */
+  valueField?: string;
+  fields: ConfigField[];
+}
+
 /** A named connection point of a component (a canvas handle). */
 export interface TerminalSpec {
   /** Handle id stored on wires, e.g. "pos". */
@@ -83,10 +189,10 @@ export interface CircuitComponent {
   value?: number | null;
   /** Instructor placement this component comes from (student circuits). */
   refId?: string | null;
-  /** Extra numeric settings, e.g. a potentiometer's wiperPosition (0-1). */
+  /** Numeric settings other than the value, e.g. wiperPosition (0-1). */
   params?: Record<string, number>;
-  /** Terminal override from the equipment config (same count as the kind). */
-  terminals?: TerminalSpec[] | null;
+  /** How the component behaves. Defaults to the built-in preset of `kind`. */
+  spec?: ComponentSpec;
 }
 
 /** A wire between two component handles (canvas handle ids, e.g. "left"). */

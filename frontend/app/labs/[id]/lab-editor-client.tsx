@@ -60,6 +60,21 @@ type SaveStatus =
   | { status: "idle" | "saving" | "saved" }
   | { status: "error"; message: string };
 
+/** A new placement's settings: field defaults, then the equipment's own. */
+const initialConfig = (equipment: LabEquipment) => {
+  const defaults = Object.fromEntries(
+    (equipment.component?.fields ?? [])
+      .filter((field) => field.default !== undefined)
+      .map((field) => [field.key, field.default]),
+  );
+  const own =
+    equipment.defaultConfigJson && typeof equipment.defaultConfigJson === "object"
+      ? equipment.defaultConfigJson
+      : {};
+  const config = { ...defaults, ...own };
+  return Object.keys(config).length > 0 ? config : null;
+};
+
 /** What gets saved; used to detect unsaved changes. Ids are left out. */
 const snapshotOf = ({
   placedEquipments,
@@ -176,8 +191,7 @@ export function LabEditorClient({
           positionX: x,
           positionY: y,
           positionZ: placedEquipments.length,
-          configJson:
-            (equipment.defaultConfigJson as Record<string, unknown>) || null,
+          configJson: initialConfig(equipment),
           equipment,
         };
         setPlacedEquipments((prev) => [...prev, newPlacement]);

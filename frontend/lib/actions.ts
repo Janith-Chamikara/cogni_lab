@@ -9,7 +9,6 @@ import {
   CreateLabEquipmentPayload,
   CreateLabPayload,
   CreateModulePayload,
-  ComponentPreset,
   EquipmentPlacement,
   ExperimentStep,
   Lab,
@@ -114,26 +113,6 @@ export const getLabEquipments = async (): Promise<
   }
 };
 
-export const getComponentPresets = async (): Promise<
-  ActionResult<ComponentPreset[]>
-> => {
-  try {
-    const token = await getAuthToken();
-
-    const response = await api.get<ComponentPreset[]>(
-      "/lab-equipment/presets",
-      { headers: token ? { Authorization: `Bearer ${token}` } : undefined },
-    );
-
-    return { data: response.data };
-  } catch (error) {
-    console.error(error);
-    return {
-      error: getErrorMessage(error, "Failed to load component presets."),
-    };
-  }
-};
-
 export const createLabEquipment = async (
   payload: CreateLabEquipmentPayload,
 ): Promise<ActionResult<LabEquipment>> => {
@@ -148,9 +127,8 @@ export const createLabEquipment = async (
       equipmentType: payload.equipmentType,
       equipmentName: payload.equipmentName,
       description: payload.description || undefined,
-      supportsConfiguration: payload.supportsConfiguration,
+      supportsConfiguration: payload.supportsConfiguration ?? false,
       defaultConfigJson: parseJsonIfNeeded(payload.defaultConfigJson),
-      componentSpec: payload.componentSpec,
     };
 
     const response = await api.post<LabEquipment>("/lab-equipment", body, {

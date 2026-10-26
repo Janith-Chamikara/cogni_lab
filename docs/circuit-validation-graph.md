@@ -10,14 +10,14 @@ canvas wires ──► terminals ──► nodes (union-find) ──► element 
 
 ### 1. Terminals: every equipment has named connection points
 
-| Kind                               | Terminal ids (labels)           | Polar?                                         |
-| ---------------------------------- | ------------------------------- | ---------------------------------------------- |
-| Resistor, capacitor, switch, motor | `t1` (1), `t2` (2)              | no (either way round)                          |
-| Power source                       | `neg` (−), `pos` (+)            | yes                                            |
-| LED, diode                         | `anode` (A), `cathode` (K)      | yes: current must enter at A                   |
-| Ammeter / voltmeter                | `pos` (+), `com` (COM)          | yes: current must enter at +                   |
-| Multimeter                         | `com` (COM), `v` (V), `a` (A)   | COM–V acts as a voltmeter, COM–A as an ammeter |
-| Potentiometer                      | `t1` (1), `wiper` (W), `t2` (2) | no; acts as two resistors meeting at the wiper |
+| Kind                               | Terminal ids (labels)                    | Polar?                                             |
+| ---------------------------------- | ---------------------------------------- | -------------------------------------------------- |
+| Resistor, capacitor, switch, motor | `t1` (1), `t2` (2)                       | no (either way round)                              |
+| Power source                       | `neg` (−), `pos` (+)                     | yes                                                |
+| LED, diode                         | `anode` (A), `cathode` (K)               | yes: current must enter at A                       |
+| Ammeter / voltmeter                | `pos` (+), `com` (COM)                   | yes: current must enter at +                       |
+| Multimeter                         | `com` (COM), `v` (V), `a` (A)            | COM–V acts as a voltmeter, COM–A as an ammeter     |
+| Potentiometer                      | `t1` (1), `wiper` (W), `t2` (2)          | no; acts as two resistors meeting at the wiper     |
 
 The canvas draws one labelled handle per terminal. A wire stores the
 terminal **id** as its handle (`sourceHandle: "pos"`); this page writes
@@ -50,25 +50,25 @@ Wires the instructor drew:
 
 | #   | From   | To     |
 | --- | ------ | ------ |
-| w1  | V1.+   | R1.1   |
-| w2  | R1.2   | R2.1   |
-| w3  | R1.2   | R3.1   |
-| w4  | R2.2   | LED1.A |
-| w5  | R3.2   | LED1.A |
+| w1  | V1.+   | R1.1  |
+| w2  | R1.2  | R2.1  |
+| w3  | R1.2  | R3.1  |
+| w4  | R2.2  | LED1.A |
+| w5  | R3.2  | LED1.A |
 | w6  | LED1.K | V1.−   |
-| w7  | VM.+   | R1.1   |
-| w8  | VM.COM | R1.2   |
+| w7  | VM.+   | R1.1  |
+| w8  | VM.COM | R1.2  |
 
 ### 3. Step 1: wires collapse terminals into nodes (union-find)
 
 Every terminal starts alone. Each wire merges the groups of its two ends. Afterwards, each group is one **electrical node**: a set of points that are all at the same voltage.
 
-| Node   | Terminals in it          |
-| ------ | ------------------------ |
-| **n1** | V1.+, R1.1, VM.+         |
+| Node   | Terminals in it             |
+| ------ | --------------------------- |
+| **n1** | V1.+, R1.1, VM.+           |
 | **n2** | R1.2, R2.1, R3.1, VM.COM |
-| **n3** | R2.2, R3.2, LED1.A       |
-| **n4** | LED1.K, V1.−             |
+| **n3** | R2.2, R3.2, LED1.A        |
+| **n4** | LED1.K, V1.−                |
 
 Drawing w3 before w2, or drawing a wire right-to-left, produces exactly the same nodes. This is why action order does not matter.
 
@@ -253,9 +253,9 @@ No two edges share both nodes, and nodes a and b each touch 3 edges, so the redu
 | Check              | Example message                                                                                             |
 | ------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `matchesReference` | "Your circuit matches the instructor's circuit" / "R2 and R3 should be in parallel, but they are in series" |
-| `polarity`         | "LED1 is reversed: its anode must face the + side of the supply"                                            |
+| `polarity`         | "LED1 is reversed: its anode must face the + side of the supply"                                           |
 | `instruments`      | "VM should be connected across a component (in parallel), but it is in series"                              |
-| existing checks    | required components, connections, short circuit, closed loop, topology, Req                                 |
+| existing checks    | required components, connections, short circuit, closed loop, topology, Req                          |
 
 ### 12. Results, scoring and rules
 
@@ -265,11 +265,11 @@ validated this way; a lab without saved rules uses the default rules. The
 weights below only rank a student's attempts (a validated attempt always
 ranks first) and are not shown as a percentage.
 
-| Check              | Default weight | When it runs                                                                    |
-| ------------------ | -------------- | ------------------------------------------------------------------------------- |
-| `matchesReference` | 30             | `compareToReference` is on (default) and the instructor saved at least one wire |
-| `polarity`         | 10             | the circuit has a supply, polar parts and a series/parallel tree                |
-| `instruments`      | 10             | the circuit has meters and a series/parallel tree                               |
+| Check              | Default weight | When it runs                                                                                  |
+| ------------------ | -------------- | --------------------------------------------------------------------------------------------- |
+| `matchesReference` | 30             | `compareToReference` is on (default) and the instructor saved at least one wire               |
+| `polarity`         | 10             | the circuit has a supply, polar parts and a series/parallel tree                              |
+| `instruments`      | 10             | the circuit has meters and a series/parallel tree                                             |
 
 - `matchesReference` passes only when the fingerprints are equal. When it
   fails, it still earns part of its weight: the share of part pairs related
@@ -308,3 +308,4 @@ circuit (`GET /labs/:id/reference`, instructors only) and shows its
 fingerprint, topology, Req and any problems (e.g. a reversed LED) that would
 make every student fail. **Graph & tree** shows the same debug view. Save the
 lab first: unsaved canvas changes are not included.
+

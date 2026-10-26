@@ -20,27 +20,23 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import {
-  ComponentPreset,
-  CreateLabEquipmentPayload,
-  LabEquipment,
-} from "@/lib/types";
-import { createLabEquipment, getComponentPresets } from "@/lib/actions";
-import {
-  ComponentDefinitionEditor,
-  fromDefinition,
-  toDefinition,
-  type ComponentEditorState,
-} from "@/components/lab-equipment/component-definition-editor";
-
-const DEFAULT_PRESET = "generic";
+import { CreateLabEquipmentPayload, LabEquipment } from "@/lib/types";
+import { createLabEquipment } from "@/lib/actions";
 
 type CreateLabEquipmentDialogProps = {
   open: boolean;
@@ -58,11 +54,6 @@ export function CreateLabEquipmentDialog({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [presets, setPresets] = useState<ComponentPreset[]>([]);
-  const [presetId, setPresetId] = useState(DEFAULT_PRESET);
-  const [component, setComponent] = useState<ComponentEditorState | null>(
-    null,
-  );
 
   const form = useForm<LabEquipmentFormValues>({
     resolver: zodResolver(labEquipmentSchema),
@@ -70,38 +61,13 @@ export function CreateLabEquipmentDialog({
       equipmentType: "",
       equipmentName: "",
       description: "",
+      supportsConfiguration: false,
+      defaultConfigJson: "",
       image: null,
     },
   });
 
-  const choosePreset = (id: string, list = presets) => {
-    const preset = list.find((p) => p.id === id);
-    if (!preset) return;
-    setPresetId(id);
-    setComponent(fromDefinition(preset.definition));
-  };
-
-  // Load the presets once; the editor starts from the default one.
-  useEffect(() => {
-    if (!open || presets.length > 0) return;
-    let cancelled = false;
-    getComponentPresets().then((result) => {
-      if (cancelled) return;
-      if (result.error || !result.data) {
-        setCreateError(
-          result.error ?? "Failed to load component presets.",
-        );
-        return;
-      }
-      setPresets(result.data);
-      choosePreset(DEFAULT_PRESET, result.data);
-    });
-    return () => {
-      cancelled = true;
-    };
-    // choosePreset only depends on state set here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, presets.length]);
+  const supportsConfiguration = form.watch("supportsConfiguration");
 
   useEffect(() => {
     if (!open) {
@@ -109,13 +75,13 @@ export function CreateLabEquipmentDialog({
         equipmentType: "",
         equipmentName: "",
         description: "",
+        supportsConfiguration: false,
+        defaultConfigJson: "",
         image: null,
       });
       setImagePreviewUrl(null);
       setCreateError(null);
-      if (presets.length > 0) choosePreset(DEFAULT_PRESET);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, form]);
 
   useEffect(() => {
@@ -138,7 +104,8 @@ export function CreateLabEquipmentDialog({
         equipmentType: values.equipmentType,
         equipmentName: values.equipmentName,
         description: values.description?.trim() || undefined,
-        componentSpec: component ? toDefinition(component) : undefined,
+        supportsConfiguration: values.supportsConfiguration,
+        defaultConfigJson: values.defaultConfigJson?.trim() || undefined,
         image: values.image ?? undefined,
       };
 
@@ -160,11 +127,11 @@ export function CreateLabEquipmentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create equipment</DialogTitle>
           <DialogDescription>
-            Add equipment and define how it behaves in circuits.
+            Add new equipment with an optional configuration template.
           </DialogDescription>
         </DialogHeader>
 
@@ -222,6 +189,33 @@ export function CreateLabEquipmentDialog({
             />
 
             <div className="flex flex-col gap-4">
+              <FormField
+                control={form.control}
+                name="supportsConfiguration"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Supports configuration</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value ? "true" : "false"}
+                        onValueChange={(value) =>
+                          field.onChange(value === "true")
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="false">No</SelectItem>
+                          <SelectItem value="true">Yes</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
               <FormField
                 control={form.control}
                 name="image"
@@ -312,15 +306,27 @@ export function CreateLabEquipmentDialog({
               />
             </div>
 
-            {component && (
-              <ComponentDefinitionEditor
-                presets={presets}
-                presetId={presetId}
-                onPresetChange={(id) => choosePreset(id)}
-                value={component}
-                onChange={setComponent}
-              />
-            )}
+            <FormField
+              control={form.control}
+              name="defaultConfigJson"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Default config JSON</FormLabel>
+                  <FormControl>
+                    <textarea
+                      {...field}
+                      className="border-input focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 min-h-24 w-full resize-none rounded-md border bg-transparent px-3 py-2 font-mono text-sm shadow-xs outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+                      placeholder='{"channel":1,"scale":"5V"}'
+                      disabled={!supportsConfiguration}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Provide valid JSON only when configuration is enabled.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {createError && (
               <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">

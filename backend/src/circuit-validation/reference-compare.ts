@@ -1,7 +1,7 @@
 import type { CircuitAnalysis } from './circuit-analysis';
 import { roleOf } from './circuit-analysis';
 import type { ParsedElement } from './circuit-parser';
-import { specOf } from './component-registry';
+import { getComponentSpec } from './component-registry';
 import { relationOf, type ReductionTree } from './topology';
 import type { ComparisonDebug, Orientation, Relation } from './types';
 
@@ -22,7 +22,7 @@ const formatNumber = (value: number) => String(Number(value.toPrecision(6)));
 
 /** Kind and value of an element, e.g. "R:100". Orientation not included. */
 export const classKey = (e: ParsedElement, includeValues: boolean) => {
-  const code = e.branch.code ?? specOf(e.component).code;
+  const code = e.branch.code ?? getComponentSpec(e.component.kind).code;
   return includeValues && e.value !== null
     ? `${code}:${formatNumber(e.value)}`
     : code;

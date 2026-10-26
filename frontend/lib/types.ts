@@ -8,8 +8,6 @@ export type LabEquipment = {
   imageUrl?: string | null;
   /** Named connection points drawn as canvas handles (from the API). */
   terminals?: TerminalSpec[];
-  /** How it behaves in circuits: its own definition or a preset (API). */
-  component?: ComponentDefinition;
   creator?: {
     id: string;
     fullName: string | null;
@@ -29,7 +27,6 @@ export type CreateLabEquipmentPayload = {
   description?: string;
   supportsConfiguration?: boolean;
   defaultConfigJson?: Record<string, unknown> | string;
-  componentSpec?: ComponentDefinition;
   image?: File | null;
 };
 
@@ -96,14 +93,6 @@ export type WireConnection = {
   wireColor?: string;
 };
 
-/** The instructor who owns a lab, as shown to students. */
-export type LabInstructor = {
-  id: string;
-  fullName: string | null;
-  email: string | null;
-  university?: string | null;
-};
-
 export type Lab = {
   id: string;
   instructorId: string;
@@ -117,7 +106,11 @@ export type Lab = {
   completionStatus: LabStatus;
   createdAt: string;
   updatedAt: string;
-  instructor?: LabInstructor;
+  instructor?: {
+    id: string;
+    fullName: string | null;
+    email: string | null;
+  };
   module?: {
     id: string;
     moduleName: string;
@@ -176,54 +169,6 @@ export type CircuitRules = {
   /** Compare student circuits with the instructor's wired circuit. */
   compareToReference?: boolean;
   weights?: Record<string, number>;
-};
-
-// Component definitions: how an equipment behaves in circuits. Mirrors the
-// backend's circuit-validation/types.ts.
-
-export type ConfigField = {
-  key: string;
-  label: string;
-  type: "number" | "text" | "select";
-  unit?: string;
-  options?: string[];
-  min?: number;
-  max?: number;
-  default?: number | string;
-};
-
-export type BranchRole = "load" | "voltmeter" | "ammeter";
-
-export type ComponentBranch = {
-  id: string;
-  /** For polar branches, current must enter here. */
-  from: string;
-  to: string;
-  polar?: boolean;
-  role?: BranchRole;
-  code?: string;
-  share?: { param: string; invert?: boolean };
-};
-
-export type ComponentDefinition = {
-  kind: string;
-  labelPrefix: string;
-  code?: string;
-  role: "load" | "source" | "instrument";
-  resistive?: boolean;
-  terminals: TerminalSpec[];
-  positiveTerminal?: string;
-  branches: ComponentBranch[];
-  modes?: Array<{ whenWired: string[]; branches: string[] }>;
-  valueField?: string;
-  fields: ConfigField[];
-};
-
-export type ComponentPreset = {
-  id: string;
-  name: string;
-  description: string;
-  definition: ComponentDefinition;
 };
 
 export type TerminalSpec = {

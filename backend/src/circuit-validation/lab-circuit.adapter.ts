@@ -1,17 +1,13 @@
 import {
+  getComponentSpec,
+  readTerminalOverride,
+  resolveComponentKind,
   resolveComponentParams,
   resolveComponentValue,
-  resolveEquipmentDefinition,
-  type EquipmentLike,
+  resolveTerminals,
 } from './component-registry';
-import { compileDefinition } from './component-definition';
 import { asRecord } from './circuit-rules';
-import type {
-  CircuitComponent,
-  CircuitState,
-  ComponentDefinition,
-  TerminalSpec,
-} from './types';
+import type { CircuitComponent, CircuitState, TerminalSpec } from './types';
 
 // Converts the project's existing data shapes (LabInstanceEquipment
 // placements, WireConnection-style wires) into validation engine inputs.
@@ -20,7 +16,11 @@ export interface LabPlacementLike {
   id: string;
   equipmentId: string;
   configJson?: unknown;
-  equipment?: EquipmentLike | null;
+  equipment?: {
+    equipmentName: string;
+    equipmentType: string;
+    defaultConfigJson?: unknown;
+  } | null;
 }
 
 /** A wire saved by the instructor (WireConnection rows). */
@@ -47,21 +47,21 @@ export interface StudentCircuitInput {
   }>;
 }
 
-const NO_EQUIPMENT: EquipmentLike = { equipmentName: '', equipmentType: '' };
-
 const describePlacement = (placement: LabPlacementLike) => {
   const config = asRecord(placement.configJson);
   const defaults = asRecord(placement.equipment?.defaultConfigJson);
-  const spec = compileDefinition(
-    resolveEquipmentDefinition(
-      placement.equipment ?? NO_EQUIPMENT,
-      config ?? defaults,
-    ),
+  const kind = resolveComponentKind(
+    placement.equipment?.equipmentName,
+    placement.equipment?.equipmentType,
+    config ?? defaults,
   );
   return {
-    spec,
-    value: resolveComponentValue(spec, config, defaults),
-    params: resolveComponentParams(spec, config, defaults),
+    kind,
+    value: resolveComponentValue(kind, config, defaults),
+    params: resolveComponentParams(kind, config, defaults),
+    terminals:
+      readTerminalOverride(kind, config) ??
+      readTerminalOverride(kind, defaults),
     name:
       typeof config?.name === 'string' && config.name.trim()
         ? config.name.trim()
@@ -78,34 +78,38 @@ export const buildRequiredComponents = (
 ): CircuitComponent[] => {
   const counters = new Map<string, number>();
   return placements.map((placement) => {
-    const { spec, value, name, params } = describePlacement(placement);
-    const prefix = spec.labelPrefix;
+    const { kind, value, name, params, terminals } =
+      describePlacement(placement);
+    const prefix = getComponentSpec(kind).labelPrefix;
     const count = (counters.get(prefix) ?? 0) + 1;
     counters.set(prefix, count);
     return {
       id: placement.id,
       label: name ?? `${prefix}${count}`,
-      kind: spec.kind,
+      kind,
       value,
-      spec,
       ...(params && { params }),
+      ...(terminals && { terminals }),
     };
   });
 };
 
-/**
- * How a library or placed equipment behaves, for the editors: its definition
- * (own or preset) and the terminals the canvas draws as handles.
- */
-export const describeEquipmentComponent = (
-  equipment: EquipmentLike,
+/** Terminals of a placed (or library) equipment, as the canvas shows them. */
+export const describeTerminals = (
+  equipment: {
+    equipmentName: string;
+    equipmentType: string;
+    defaultConfigJson?: unknown;
+  },
   configJson?: unknown,
-): { component: ComponentDefinition; terminals: TerminalSpec[] } => {
-  const component = resolveEquipmentDefinition(
+): TerminalSpec[] => {
+  const { kind, terminals } = describePlacement({
+    id: '',
+    equipmentId: '',
+    configJson,
     equipment,
-    asRecord(configJson) ?? asRecord(equipment.defaultConfigJson),
-  );
-  return { component, terminals: component.terminals };
+  });
+  return resolveTerminals(kind, terminals);
 };
 
 const toWires = (connections: LabWireLike[]): CircuitState['wires'] =>
@@ -157,8 +161,8 @@ export const buildStudentCircuit = (
       kind: source?.kind ?? 'unknown',
       value: source?.value ?? null,
       refId: source?.id ?? null,
-      ...(source?.spec && { spec: source.spec }),
       ...(source?.params && { params: source.params }),
+      ...(source?.terminals && { terminals: source.terminals }),
     };
   });
 

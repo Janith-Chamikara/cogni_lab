@@ -11,8 +11,7 @@ import {
   LayoutGrid,
   TrendingUp,
   Calendar,
-  Users,
-  ChevronRight,
+  Filter,
 } from "lucide-react";
 import {
   Card,
@@ -26,35 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import type {
-  Lab,
-  Module,
-  LabEquipment,
-  LabAttemptSummary,
-  LabInstructor,
-} from "@/lib/types";
-import {
-  InstructorChip,
-  InstructorContactCard,
-  instructorName,
-} from "@/components/student/instructor-contact-card";
-import {
-  ActiveFilterChips,
-  DateRangeMenu,
-  DEFAULT_LAB_FILTERS,
-  LabFilterMenu,
-  activeFilterCount,
-  isInDateRange,
-  type LabFilters,
-  type LabStatusFilter,
-} from "@/components/student/lab-filters";
-
-/** An instructor with the labs (and their modules) a student can open. */
-type InstructorWithLabs = {
-  instructor: LabInstructor;
-  labs: Lab[];
-  modules: string[];
-};
+import type { Lab, Module, LabEquipment, LabAttemptSummary } from "@/lib/types";
 
 interface StudentDashboardClientProps {
   initialLabs: Lab[];
@@ -80,71 +51,6 @@ function LabProgressBadge({ summary }: { summary?: LabAttemptSummary }) {
   );
 }
 
-/** Where the student stands on a lab, from their best attempt. */
-const statusOf = (summary?: LabAttemptSummary): LabStatusFilter =>
-  !summary ? "not_started" : summary.passed ? "validated" : "in_progress";
-
-function LabCard({
-  lab,
-  summary,
-  onStart,
-}: {
-  lab: Lab;
-  summary?: LabAttemptSummary;
-  onStart: () => void;
-}) {
-  // The lab list sends counts; a single lab sends the full lists.
-  const equipmentCount =
-    lab._count?.labEquipments ?? lab.labEquipments?.length ?? 0;
-  const stepCount =
-    lab._count?.experimentSteps ?? lab.experimentSteps?.length ?? 0;
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader>
-        <CardTitle className="line-clamp-1" title={lab.labName}>
-          {lab.labName}
-        </CardTitle>
-        <CardDescription className="mt-2 line-clamp-2">
-          {lab.description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1 space-y-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="outline">
-            {equipmentCount} {equipmentCount === 1 ? "Part" : "Parts"}
-          </Badge>
-          <Badge variant="outline">
-            {stepCount} {stepCount === 1 ? "Step" : "Steps"}
-          </Badge>
-          <LabProgressBadge summary={summary} />
-        </div>
-        {lab.module && (
-          <div className="text-sm text-muted-foreground">
-            Module: {lab.module.moduleName}
-          </div>
-        )}
-        {lab.instructor && (
-          <div className="border-t pt-3">
-            <InstructorChip instructor={lab.instructor} />
-          </div>
-        )}
-      </CardContent>
-      <CardFooter>
-        <Button
-          className="w-full"
-          onClick={onStart}
-          data-ai-action="navigate"
-          data-ai-href={`/student/lab/${lab.id}`}
-          data-ai-label={`Open ${lab.labName}`}
-        >
-          Start Experiment
-        </Button>
-      </CardFooter>
-    </Card>
-  );
-}
-
 export function StudentDashboardClient({
   initialLabs,
   initialModules,
@@ -153,48 +59,24 @@ export function StudentDashboardClient({
 }: StudentDashboardClientProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [filters, setFilters] =
-    React.useState<LabFilters>(DEFAULT_LAB_FILTERS);
-  const [tab, setTab] = React.useState("overview");
-  const setModule = (moduleId: string) =>
-    setFilters((current) => ({ ...current, moduleId }));
+  const [selectedModule, setSelectedModule] = React.useState<string>("all");
 
-  // Instructors of the available labs, A–Z, filtered by the search box.
-  const instructors = React.useMemo(() => {
-    const byId = new Map<string, InstructorWithLabs>();
-    for (const lab of initialLabs) {
-      if (!lab.instructor) continue;
-      const entry = byId.get(lab.instructor.id) ?? {
-        instructor: lab.instructor,
-        labs: [],
-        modules: [],
-      };
-      entry.labs.push(lab);
-      const moduleName = lab.module?.moduleName;
-      if (moduleName && !entry.modules.includes(moduleName)) {
-        entry.modules.push(moduleName);
-      }
-      byId.set(lab.instructor.id, entry);
-    }
+  const filteredLabs = React.useMemo(() => {
+    const byModule =
+      selectedModule === "all"
+        ? initialLabs
+        : initialLabs.filter((lab) => lab.moduleId === selectedModule);
 
-    const query = searchQuery.trim().toLowerCase();
-    return [...byId.values()]
-      .filter(
-        ({ instructor, modules }) =>
-          !query ||
-          [
-            instructor.fullName,
-            instructor.email,
-            instructor.university,
-            ...modules,
-          ].some((text) => text?.toLowerCase().includes(query)),
-      )
-      .sort((a, b) =>
-        instructorName(a.instructor).localeCompare(
-          instructorName(b.instructor),
-        ),
-      );
-  }, [initialLabs, searchQuery]);
+    if (!searchQuery) return byModule;
+
+    return byModule.filter(
+      (lab) =>
+        lab.labName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        lab.module?.moduleName
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()),
+    );
+  }, [initialLabs, selectedModule, searchQuery]);
 
   // Only count attempts for labs that are still listed.
   const attemptsByLab = React.useMemo(() => {
@@ -205,51 +87,6 @@ export function StudentDashboardClient({
         .map((summary) => [summary.labId, summary]),
     );
   }, [initialLabs, attemptSummary]);
-
-  const filteredLabs = React.useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return initialLabs.filter(
-      (lab) =>
-        (filters.moduleId === "all" || lab.moduleId === filters.moduleId) &&
-        (filters.instructorId === "all" ||
-          lab.instructorId === filters.instructorId) &&
-        (filters.status === "all" ||
-          statusOf(attemptsByLab.get(lab.id)) === filters.status) &&
-        isInDateRange(lab.createdAt, filters.dateRange) &&
-        (!query ||
-          [
-            lab.labName,
-            lab.module?.moduleName,
-            lab.instructor?.fullName,
-          ].some((text) => text?.toLowerCase().includes(query))),
-    );
-  }, [initialLabs, attemptsByLab, filters, searchQuery]);
-
-  const isFiltered =
-    !!searchQuery.trim() ||
-    activeFilterCount(filters) > 0 ||
-    filters.dateRange.preset !== "any";
-
-  // Options for the filter menu: modules and instructors that have labs.
-  const moduleOptions = React.useMemo(
-    () =>
-      initialModules
-        .filter((mod) => initialLabs.some((lab) => lab.moduleId === mod.id))
-        .map((mod) => ({ id: mod.id, label: mod.moduleName })),
-    [initialModules, initialLabs],
-  );
-  const instructorOptions = React.useMemo(() => {
-    const byId = new Map<string, string>();
-    for (const lab of initialLabs) {
-      if (lab.instructor) {
-        byId.set(lab.instructor.id, instructorName(lab.instructor));
-      }
-    }
-    return [...byId.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-  }, [initialLabs]);
-  const showLabFilters = tab === "overview" || tab === "labs";
 
   const stats = React.useMemo(() => {
     const summaries = [...attemptsByLab.values()];
@@ -286,7 +123,7 @@ export function StudentDashboardClient({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search labs and instructors..."
+                placeholder="Search labs..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-72 bg-background pl-10 shadow-sm"
@@ -375,44 +212,24 @@ export function StudentDashboardClient({
         </div>
 
         {/* Tabs Section – mirrors main dashboard structure */}
-        <Tabs value={tab} onValueChange={setTab} className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <Tabs defaultValue="overview" className="space-y-6">
+          <div className="flex items-center justify-between">
             <TabsList className="bg-card shadow-sm">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="labs">Labs</TabsTrigger>
               <TabsTrigger value="modules">Modules</TabsTrigger>
-              <TabsTrigger value="instructors">Instructors</TabsTrigger>
             </TabsList>
-            {showLabFilters && (
-              <div className="flex items-center gap-2">
-                <LabFilterMenu
-                  filters={filters}
-                  onChange={setFilters}
-                  modules={moduleOptions}
-                  instructors={instructorOptions}
-                />
-                <DateRangeMenu
-                  value={filters.dateRange}
-                  onChange={(dateRange) =>
-                    setFilters((current) => ({ ...current, dateRange }))
-                  }
-                />
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="gap-2">
+                <Filter className="h-4 w-4" />
+                Filter
+              </Button>
+              <Button variant="outline" size="sm" className="gap-2">
+                <Calendar className="h-4 w-4" />
+                Date Range
+              </Button>
+            </div>
           </div>
-
-          {showLabFilters && (
-            <ActiveFilterChips
-              filters={filters}
-              onChange={setFilters}
-              moduleName={(id) =>
-                moduleOptions.find((option) => option.id === id)?.label
-              }
-              instructorName={(id) =>
-                instructorOptions.find((option) => option.id === id)?.label
-              }
-            />
-          )}
 
           {/* Overview: quick summary using the same labs grid component students already had */}
           <TabsContent value="overview" className="space-y-6">
@@ -429,26 +246,61 @@ export function StudentDashboardClient({
                     <div className="text-center">
                       <FlaskConical className="mx-auto h-12 w-12 text-muted-foreground" />
                       <h3 className="mt-4 text-lg font-semibold">
-                        {isFiltered
-                          ? "No labs match your filters"
-                          : "No labs available"}
+                        No labs available
                       </h3>
                       <p className="mt-2 text-muted-foreground">
-                        {isFiltered
-                          ? "Try clearing some filters or the search."
-                          : "Check back later for new experiments."}
+                        Check back later for new experiments.
                       </p>
                     </div>
                   </Card>
                 ) : (
                   <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {filteredLabs.slice(0, 6).map((lab) => (
-                      <LabCard
-                        key={lab.id}
-                        lab={lab}
-                        summary={attemptsByLab.get(lab.id)}
-                        onStart={() => handleStartLab(lab.id)}
-                      />
+                      <Card key={lab.id} className="flex flex-col">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="line-clamp-1">
+                                {lab.labName}
+                              </CardTitle>
+                              <CardDescription className="mt-2 line-clamp-2">
+                                {lab.description}
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">
+                                {lab.labEquipments?.length || 0} Equipment
+                              </Badge>
+                              <Badge variant="outline">
+                                {lab.experimentSteps?.length || 0} Steps
+                              </Badge>
+                              <LabProgressBadge
+                                summary={attemptsByLab.get(lab.id)}
+                              />
+                            </div>
+                            {lab.module && (
+                              <div className="text-sm text-muted-foreground">
+                                Module: {lab.module.moduleName}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <CardFooter>
+                          <Button
+                            className="w-full"
+                            onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
+                          >
+                            Start Experiment
+                          </Button>
+                        </CardFooter>
+                      </Card>
                     ))}
                   </div>
                 )}
@@ -473,8 +325,8 @@ export function StudentDashboardClient({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     size="sm"
-                    variant={filters.moduleId === "all" ? "default" : "outline"}
-                    onClick={() => setModule("all")}
+                    variant={selectedModule === "all" ? "default" : "outline"}
+                    onClick={() => setSelectedModule("all")}
                   >
                     All Labs
                   </Button>
@@ -483,9 +335,9 @@ export function StudentDashboardClient({
                       key={module.id}
                       size="sm"
                       variant={
-                        filters.moduleId === module.id ? "default" : "outline"
+                        selectedModule === module.id ? "default" : "outline"
                       }
-                      onClick={() => setModule(module.id)}
+                      onClick={() => setSelectedModule(module.id)}
                     >
                       {module.moduleName}
                     </Button>
@@ -497,26 +349,61 @@ export function StudentDashboardClient({
                     <div className="text-center">
                       <FlaskConical className="mx-auto h-12 w-12 text-muted-foreground" />
                       <h3 className="mt-4 text-lg font-semibold">
-                        {isFiltered
-                          ? "No labs match your filters"
-                          : "No labs available"}
+                        No labs available
                       </h3>
                       <p className="mt-2 text-muted-foreground">
-                        {isFiltered
-                          ? "Try a different module, clear some filters or the search."
-                          : "Check back later for new experiments."}
+                        Try a different module or check back later.
                       </p>
                     </div>
                   </Card>
                 ) : (
                   <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                     {filteredLabs.map((lab) => (
-                      <LabCard
-                        key={lab.id}
-                        lab={lab}
-                        summary={attemptsByLab.get(lab.id)}
-                        onStart={() => handleStartLab(lab.id)}
-                      />
+                      <Card key={lab.id} className="flex flex-col">
+                        <CardHeader>
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="line-clamp-1">
+                                {lab.labName}
+                              </CardTitle>
+                              <CardDescription className="mt-2 line-clamp-2">
+                                {lab.description}
+                              </CardDescription>
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="flex-1">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">
+                                {lab.labEquipments?.length || 0} Equipment
+                              </Badge>
+                              <Badge variant="outline">
+                                {lab.experimentSteps?.length || 0} Steps
+                              </Badge>
+                              <LabProgressBadge
+                                summary={attemptsByLab.get(lab.id)}
+                              />
+                            </div>
+                            {lab.module && (
+                              <div className="text-sm text-muted-foreground">
+                                Module: {lab.module.moduleName}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                        <CardFooter>
+                          <Button
+                            className="w-full"
+                            onClick={() => handleStartLab(lab.id)}
+                            data-ai-action="navigate"
+                            data-ai-href={`/student/lab/${lab.id}`}
+                            data-ai-label={`Open ${lab.labName}`}
+                          >
+                            Start Experiment
+                          </Button>
+                        </CardFooter>
+                      </Card>
                     ))}
                   </div>
                 )}
@@ -578,85 +465,6 @@ export function StudentDashboardClient({
                           </div>
                         </CardContent>
                       </Card>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Instructors tab – who runs the available labs, and how to reach them */}
-          <TabsContent value="instructors">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Instructors</CardTitle>
-                <CardDescription>
-                  Instructors of your available labs. Contact them if you need
-                  help with an experiment.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {instructors.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                    <h3 className="mt-4 text-lg font-semibold">
-                      {searchQuery
-                        ? "No instructors match your search"
-                        : "No instructors yet"}
-                    </h3>
-                    <p className="mt-2 text-muted-foreground">
-                      {searchQuery
-                        ? "Try a different name, email or module."
-                        : "Instructors appear here once their labs are available."}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {instructors.map(({ instructor, labs, modules }) => (
-                      <InstructorContactCard
-                        key={instructor.id}
-                        instructor={instructor}
-                      >
-                        {modules.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {modules.map((name) => (
-                              <Badge key={name} variant="secondary">
-                                {name}
-                              </Badge>
-                            ))}
-                          </div>
-                        )}
-                        <div className="space-y-1 border-t pt-3">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            {labs.length} {labs.length === 1 ? "lab" : "labs"}
-                          </p>
-                          <ul className="space-y-0.5">
-                            {labs.map((lab) => (
-                              <li key={lab.id}>
-                                <button
-                                  type="button"
-                                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
-                                  onClick={() => handleStartLab(lab.id)}
-                                  data-ai-action="navigate"
-                                  data-ai-href={`/student/lab/${lab.id}`}
-                                  data-ai-label={`Open ${lab.labName}`}
-                                >
-                                  <span className="min-w-0 flex-1 truncate">
-                                    {lab.labName}
-                                  </span>
-                                  {attemptsByLab.get(lab.id)?.passed && (
-                                    <CheckCircle2
-                                      className="h-3.5 w-3.5 shrink-0 text-green-600"
-                                      aria-label="Validated"
-                                    />
-                                  )}
-                                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </InstructorContactCard>
                     ))}
                   </div>
                 )}

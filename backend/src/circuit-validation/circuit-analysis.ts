@@ -4,7 +4,7 @@ import {
   type ParsedCircuit,
   type ParsedElement,
 } from './circuit-parser';
-import { specOf } from './component-registry';
+import { getComponentSpec } from './component-registry';
 import {
   classifyTopology,
   equivalentValue,
@@ -27,9 +27,9 @@ import type {
 // comparison, polarity and instrument placement).
 
 export const isSourceElement = (e: ParsedElement) =>
-  !!specOf(e.component).isSource;
+  !!getComponentSpec(e.component.kind).isSource;
 export const isInstrumentElement = (e: ParsedElement) =>
-  !!specOf(e.component).isInstrument;
+  !!getComponentSpec(e.component.kind).isInstrument;
 export const roleOf = (e: ParsedElement) => e.branch.role ?? 'load';
 export const isShorted = (e: ParsedElement) => e.nodes[0] === e.nodes[1];
 
@@ -228,7 +228,7 @@ export const analyzeCircuit = (
   const edges = toEdges(network);
   const resistanceOf = (id: string) => {
     const element = network.find((e) => e.id === id);
-    return element && specOf(element.component).resistive
+    return element && getComponentSpec(element.component.kind).resistive
       ? element.value
       : null;
   };
@@ -329,7 +329,7 @@ const analyzeFullNetwork = (
 
   if (portSource) {
     if (!isShorted(portSource)) {
-      const spec = specOf(portSource.component);
+      const spec = getComponentSpec(portSource.component.kind);
       const plusIndex = portSource.branch.between.indexOf(
         spec.plusTerminal ?? 1,
       );

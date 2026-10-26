@@ -73,12 +73,6 @@ export class LabEquipmentController {
     return this.labEquipmentService.findAll();
   }
 
-  /** Component presets to start a new equipment's definition from. */
-  @Get('presets')
-  findPresets() {
-    return this.labEquipmentService.findPresets();
-  }
-
   @Get('my-equipment')
   async findMyEquipment(@Req() req: AuthenticatedRequest) {
     const creatorId = await this.getDbUserId(req.user);

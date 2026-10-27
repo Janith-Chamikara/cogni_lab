@@ -604,17 +604,22 @@ export function StudentLabEditor({
                     ? "Submission Results"
                     : "Progress Check Results"}
                 </CardTitle>
-                <Badge
-                  variant={validationResult.passed ? "default" : "secondary"}
-                  className={`gap-1 ${validationResult.passed ? "bg-green-600" : ""}`}
-                >
-                  {validationResult.passed ? (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5" />
-                  )}
-                  {validationResult.passed ? "Validated" : "Not validated yet"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline">
+                    Score: {validationResult.score}%
+                  </Badge>
+                  <Badge
+                    variant={validationResult.passed ? "default" : "secondary"}
+                    className={`gap-1 ${validationResult.passed ? "bg-green-600" : ""}`}
+                  >
+                    {validationResult.passed ? (
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5" />
+                    )}
+                    {validationResult.passed ? "Validated" : "Not validated yet"}
+                  </Badge>
+                </div>
               </div>
               <CardDescription>
                 {resultSource === "submit"
@@ -658,6 +663,50 @@ export function StudentLabEditor({
                     </p>
                   )}
                 </section>
+              )}
+
+              {/* One line per check: ✓ passed / ✗ failed */}
+              <div className="space-y-1">
+                {resultChecks.map((check) => (
+                  <Alert
+                    key={check.label}
+                    variant={check.passed ? "default" : "destructive"}
+                    className={
+                      check.passed
+                        ? "bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800"
+                        : ""
+                    }
+                  >
+                    <AlertDescription className="flex items-center gap-2 text-sm">
+                      {check.passed ? (
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400" />
+                      ) : (
+                        <XCircle className="h-4 w-4 shrink-0" />
+                      )}
+                      {check.message}
+                    </AlertDescription>
+                  </Alert>
+                ))}
+              </div>
+
+              {/* Details for failed checks, e.g. "R3 is not connected" */}
+              {resultIssues.length > 0 && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold text-sm text-red-600 dark:text-red-400 flex items-center gap-2">
+                    <XCircle className="h-4 w-4" />
+                    Needs Attention
+                  </h3>
+                  <ul className="space-y-1 text-sm">
+                    {resultIssues.map((msg, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-red-600 dark:text-red-400">
+                          ✗
+                        </span>
+                        {msg}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
 
               {validationResult.warnings.length > 0 && (

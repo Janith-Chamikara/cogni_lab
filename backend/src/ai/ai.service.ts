@@ -13,6 +13,7 @@ import { record, type AiChatRequest, type AiContext } from './ai-request';
 import {
   proposeGuidance,
   workspaceIssueGuidance,
+  requestsIssueGuidance,
   authorizesNavigation,
   navigationClarification,
   navigationIntent,
@@ -154,9 +155,7 @@ export class AiService {
             !guidance &&
             screen?.targets.some((target) => target.kind === 'component') &&
             request.context.workspace &&
-            /\btroubleshoot(?:ing)?\b/i.test(
-              request.messages.at(-1)?.content ?? '',
-            )
+            requestsIssueGuidance(request.messages.at(-1)?.content ?? '')
           ) {
             try {
               workspaceInspection ??= await prepared.execute(

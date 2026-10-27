@@ -168,7 +168,23 @@ export const UI_GUIDANCE_TOOL = {
   },
 };
 
-/** Keep troubleshooting visual when the model only returns a text diagnosis. */
+export const requestsIssueGuidance = (message: string) => {
+  if (
+    /\b(?:don't|do not|never|without|no need to)\b.{0,50}\b(?:mark|show|point|circle|highlight|locate|find|troubleshoot)\w*\b/i.test(
+      message,
+    )
+  )
+    return false;
+  return (
+    /\btroubleshoot\w*\b/i.test(message) ||
+    (/\b(?:mark|show|point|circle|highlight|locate|find|where)\w*\b/i.test(
+      message,
+    ) &&
+      /\b(?:error|wrong|fault|mistake|issue|problem)\w*\b/i.test(message))
+  );
+};
+
+/** Keep error-marking requests visual when the model only returns text. */
 export const workspaceIssueGuidance = (
   inspection: unknown,
   screen: ScreenContext | undefined,

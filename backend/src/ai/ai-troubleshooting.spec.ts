@@ -161,6 +161,37 @@ describe('AiService troubleshooting without a model guidance call', () => {
     expect(result.guidance).toBeUndefined();
   });
 
+  it.each([
+    'Mark the error in my circuit',
+    'Show where it is wrong',
+    'Highlight the fault',
+    'Circle the mistake',
+    'Troubleshoot my circuit',
+  ])('returns verified visual guidance for "%s"', async (content) => {
+    const { service, execute } = makeService();
+    const result = await service.chat({
+      ...request,
+      messages: [{ role: 'user', content }],
+    });
+    expect(execute).toHaveBeenCalledWith('inspect_workspace', {});
+    expect(result.guidance).toEqual(workspaceIssueGuidance(inspection, screen));
+  });
+
+  it.each([
+    'Do not mark the error, just explain it',
+    "Don't highlight the fault",
+    'Show the formula for resistance',
+    'Explain circuit errors',
+  ])('does not force error marking for "%s"', async (content) => {
+    const { service, execute } = makeService();
+    const result = await service.chat({
+      ...request,
+      messages: [{ role: 'user', content }],
+    });
+    expect(execute).not.toHaveBeenCalled();
+    expect(result.guidance).toBeUndefined();
+  });
+
   it.each(['point', 'circle'])(
     'keeps the model-selected %s without replacing its mode',
     async (mode) => {

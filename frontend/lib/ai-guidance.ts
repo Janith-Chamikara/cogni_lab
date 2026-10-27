@@ -247,7 +247,7 @@ export const collectGuidanceSnapshot = (
   messages: AiChatMessage[] = [{ role: "user", content: message }],
 ): GuidanceSnapshot | undefined => {
   if (
-    !/\b(?:where|show|find|locate|point|circle|arrow|draw|highlight|open|click|navigate|visit|launch|error|wrong|issue|struggl|stuck|missing|disconnected|help)\w*\b|can't|cannot|go to|take me/i.test(
+    !/\b(?:where|show|find|locate|mark|point|circle|arrow|draw|highlight|open|click|navigate|visit|launch|error|wrong|issue|troubleshoot|struggl|stuck|missing|disconnected|help)\w*\b|can't|cannot|go to|take me/i.test(
       message,
     ) &&
     !/what (?:can|should).{0,30}(?:do|here)|what(?:'s| is) (?:here|available)|(?:available|which) labs/i.test(
@@ -316,7 +316,7 @@ export const collectGuidanceSnapshot = (
     if (label) candidates.push({ element, kind: "section", label });
   });
   const wantsIssue =
-    /error|wrong|issue|stuck|missing|disconnected|struggl/i.test(message);
+    /error|wrong|fault|mistake|issue|problem|troubleshoot|stuck|missing|disconnected|struggl/i.test(message);
   candidates.sort((a, b) =>
     wantsIssue
       ? Number(b.kind !== "control" && b.kind !== "section") -

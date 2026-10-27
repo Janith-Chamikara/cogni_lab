@@ -5,6 +5,82 @@ import { createPortal } from "react-dom";
 import { visibleTargetRect, type GuidanceDisplay } from "@/lib/ai-guidance";
 
 type Bounds = { left: number; top: number; width: number; height: number };
+type Size = { width: number; height: number };
+
+const guidanceColors = {
+  issue: {
+    primary: "#ef4444",
+    glow: "#dc2626",
+    halo: "#fca5a5",
+    panel: "border-red-400/50 shadow-red-500/20",
+    title: "text-red-600 dark:text-red-400",
+  },
+  locate: {
+    primary: "#3b82f6",
+    glow: "#2563eb",
+    halo: "#60a5fa",
+    panel: "border-blue-400/50 shadow-blue-500/20",
+    title: "text-blue-500",
+  },
+  navigate: {
+    primary: "#22c55e",
+    glow: "#16a34a",
+    halo: "#86efac",
+    panel: "border-green-400/50 shadow-green-500/20",
+    title: "text-green-600 dark:text-green-400",
+  },
+};
+
+const issuePopupPosition = (bounds: Bounds, popup: Size, viewport: Size) => {
+  const margin = 12;
+  const gap = 24;
+  const clamp = (value: number, size: number, limit: number) =>
+    Math.max(margin, Math.min(value, limit - size - margin));
+  const centeredLeft = clamp(
+    bounds.left + (bounds.width - popup.width) / 2,
+    popup.width,
+    viewport.width,
+  );
+  const centeredTop = clamp(
+    bounds.top + (bounds.height - popup.height) / 2,
+    popup.height,
+    viewport.height,
+  );
+  const candidates = [
+    { left: bounds.left + bounds.width + gap, top: centeredTop },
+    { left: bounds.left - popup.width - gap, top: centeredTop },
+    { left: centeredLeft, top: bounds.top + bounds.height + gap },
+    { left: centeredLeft, top: bounds.top - popup.height - gap },
+  ];
+  const fits = candidates.find(
+    ({ left, top }) =>
+      left >= margin &&
+      top >= margin &&
+      left + popup.width <= viewport.width - margin &&
+      top + popup.height <= viewport.height - margin,
+  );
+  if (fits) return fits;
+
+  // On narrow screens, use the candidate that covers the least of the target.
+  const clamped = candidates.map(({ left, top }) => ({
+    left: clamp(left, popup.width, viewport.width),
+    top: clamp(top, popup.height, viewport.height),
+  }));
+  const overlap = ({ left, top }: { left: number; top: number }) =>
+    Math.max(
+      0,
+      Math.min(left + popup.width, bounds.left + bounds.width) -
+        Math.max(left, bounds.left),
+    ) *
+    Math.max(
+      0,
+      Math.min(top + popup.height, bounds.top + bounds.height) -
+        Math.max(top, bounds.top),
+    );
+  return clamped.reduce((best, next) =>
+    overlap(next) < overlap(best) ? next : best,
+  );
+};
 
 const circlePath = (bounds: Bounds) => {
   const cx = bounds.left + bounds.width / 2,
@@ -22,6 +98,9 @@ const circlePath = (bounds: Bounds) => {
 export function AiGuidanceOverlay({ route }: { route: string }) {
   const [display, setDisplay] = useState<GuidanceDisplay | null>(null);
   const [bounds, setBounds] = useState<Bounds | null>(null);
+  const [viewport, setViewport] = useState<Size>({ width: 0, height: 0 });
+  const [popupSize, setPopupSize] = useState<Size>({ width: 288, height: 120 });
+  const popupRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<GuidanceDisplay | null>(null);
   const cancelRef = useRef<() => void>(() => {});
 
@@ -35,6 +114,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
       }
       activeRef.current = next;
       setBounds(null);
+      setViewport({ width: window.innerWidth, height: window.innerHeight });
       setDisplay(next);
     };
     window.addEventListener("cogni-ai-guidance", receive);
@@ -48,11 +128,28 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
   }, [route]);
 
   useEffect(() => {
+    if (display?.plan.purpose !== "issue" || !popupRef.current) return;
+    const popup = popupRef.current;
+    const observer = new ResizeObserver(() => {
+      const { width, height } = popup.getBoundingClientRect();
+      setPopupSize((previous) =>
+        previous.width === width && previous.height === height
+          ? previous
+          : { width, height },
+      );
+    });
+    observer.observe(popup);
+    return () => observer.disconnect();
+  }, [display]);
+
+  useEffect(() => {
     if (!display) return;
     let frame = 0,
       finished = false;
     const started = performance.now();
     let previous: Bounds | null = null;
+    let viewportWidth = window.innerWidth;
+    let viewportHeight = window.innerHeight;
     const cancel = () => {
       cancelAnimationFrame(frame);
       if (!finished) {
@@ -72,6 +169,14 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         return;
       }
       const current = visibleTargetRect(display.element);
+      if (
+        viewportWidth !== window.innerWidth ||
+        viewportHeight !== window.innerHeight
+      ) {
+        viewportWidth = window.innerWidth;
+        viewportHeight = window.innerHeight;
+        setViewport({ width: viewportWidth, height: viewportHeight });
+      }
       const elapsed = performance.now() - started;
       if (current) {
         if (
@@ -94,7 +199,10 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         cancel();
         return;
       }
-      if (elapsed >= (display.plan.mode === "click" ? 1800 : 8000)) {
+      if (
+        display.plan.purpose !== "issue" &&
+        elapsed >= (display.plan.mode === "click" ? 1800 : 8000)
+      ) {
         cancel();
         return;
       }
@@ -123,6 +231,12 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
     : window.innerHeight - 80;
   const arrowStartX = bounds ? Math.max(24, bounds.left - 65) : 0;
   const arrowStartY = bounds ? Math.max(24, bounds.top - 65) : 0;
+  const isIssue = display.plan.purpose === "issue";
+  const colors = guidanceColors[display.plan.purpose];
+  const popupPosition =
+    isIssue && bounds
+      ? issuePopupPosition(bounds, popupSize, viewport)
+      : undefined;
   return createPortal(
     <div
       data-ai-guidance-overlay=""
@@ -135,7 +249,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         width="100%"
         height="100%"
         className="absolute inset-0 overflow-visible"
-        style={{ filter: "drop-shadow(0 0 6px #3b82f6)" }}
+        style={{ filter: `drop-shadow(0 0 6px ${colors.primary})` }}
       >
         <defs>
           <marker
@@ -149,7 +263,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
             <path
               d="M0 0 L8 4 L0 8"
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="1.6"
             />
           </marker>
@@ -161,7 +275,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               d={circlePath(bounds)}
               pathLength={1}
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="3"
               strokeLinecap="round"
               style={{
@@ -175,7 +289,7 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               d={`M${arrowStartX},${arrowStartY} Q${arrowStartX},${bounds.top + bounds.height / 2} ${bounds.left + 4},${bounds.top + bounds.height / 2}`}
               pathLength={1}
               fill="none"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="3"
               markerEnd="url(#cogni-guidance-arrow)"
               style={{
@@ -190,9 +304,9 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
               width={bounds.width + 10}
               height={bounds.height + 10}
               rx="10"
-              fill="#3b82f6"
+              fill={colors.primary}
               fillOpacity=".08"
-              stroke="#3b82f6"
+              stroke={colors.primary}
               strokeWidth="2.5"
               style={{ animation: "cogni-guide-pulse 1.4s infinite" }}
             />
@@ -208,35 +322,57 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
           left: cursorX,
           top: cursorY,
           transition: "left .45s ease, top .45s ease",
-          filter: "drop-shadow(0 0 8px #2563eb) drop-shadow(0 0 16px #60a5fa)",
+          filter: `drop-shadow(0 0 8px ${colors.glow}) drop-shadow(0 0 16px ${colors.halo})`,
         }}
       >
         <path
           d="M0 0 L0 25 L7 19 L12 30 L17 28 L12 17 L22 17 Z"
-          fill="#3b82f6"
+          fill={colors.primary}
           stroke="white"
           strokeWidth="1.5"
           strokeLinejoin="round"
         />
       </svg>
       <div
-        className="absolute bottom-24 left-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2 rounded-xl border border-blue-400/50 bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg shadow-blue-500/20"
+        ref={popupRef}
+        className={`absolute rounded-xl border bg-background/95 px-4 py-3 text-sm text-foreground shadow-lg ${colors.panel} ${
+          isIssue
+            ? "pointer-events-auto w-[min(288px,calc(100vw-24px))] overflow-y-auto"
+            : "bottom-24 left-1/2 w-[min(360px,calc(100vw-32px))] -translate-x-1/2"
+        }`}
+        style={
+          isIssue
+            ? {
+                left: popupPosition?.left ?? 12,
+                top: popupPosition?.top ?? 12,
+                maxHeight: "calc(100dvh - 24px)",
+                visibility: popupPosition ? "visible" : "hidden",
+              }
+            : undefined
+        }
         role="status"
       >
         <div className="flex items-center justify-between gap-2">
-          <span className="font-medium text-blue-500">
-            {display.plan.mode === "click" ? "Opening" : "Showing"}{" "}
-            {display.label}
+          <span className={`font-medium ${colors.title}`}>
+            {isIssue
+              ? "Circuit issue"
+              : `${display.plan.mode === "click" ? "Opening" : "Showing"} ${display.label}`}
           </span>
           <button
             type="button"
             onClick={() => cancelRef.current()}
-            className="pointer-events-auto shrink-0 rounded px-2 py-1 text-xs hover:bg-muted"
+            className="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center rounded text-xl leading-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label="Dismiss visual guidance"
+            title="Close"
           >
-            Dismiss
+            <span aria-hidden="true">×</span>
           </button>
         </div>
+        {isIssue && (
+          <p className="mt-1 truncate text-xs font-medium" title={display.label}>
+            {display.label}
+          </p>
+        )}
         <p className="mt-1 text-xs text-muted-foreground">
           {display.plan.reason}
         </p>

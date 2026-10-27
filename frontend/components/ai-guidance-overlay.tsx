@@ -199,7 +199,10 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
         cancel();
         return;
       }
-      if (elapsed >= (display.plan.mode === "click" ? 1800 : 8000)) {
+      if (
+        display.plan.purpose !== "issue" &&
+        elapsed >= (display.plan.mode === "click" ? 1800 : 8000)
+      ) {
         cancel();
         return;
       }
@@ -358,10 +361,11 @@ export function AiGuidanceOverlay({ route }: { route: string }) {
           <button
             type="button"
             onClick={() => cancelRef.current()}
-            className="pointer-events-auto shrink-0 rounded px-2 py-1 text-xs hover:bg-muted"
+            className="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center rounded text-xl leading-none hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2"
             aria-label="Dismiss visual guidance"
+            title="Close"
           >
-            Dismiss
+            <span aria-hidden="true">×</span>
           </button>
         </div>
         {isIssue && (

@@ -51,7 +51,7 @@ const withinTolerance = (actual: number, expected: number, percent: number) =>
       percent + 1e-9;
 
 const describe = (component: CircuitComponent) => {
-  const value = formatValue(component.kind, component.value);
+  const value = formatValue(component, component.value);
   const kind = component.kind.replace('_', ' ');
   return `${component.label} (${value ? `${kind}, ${value}` : kind})`;
 };

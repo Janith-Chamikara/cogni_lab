@@ -1,10 +1,11 @@
-import {
-  getComponentSpec,
-  handleToTerminalIndex,
-  resolveTerminals,
-  type BranchSpec,
-} from './component-registry';
-import type { CircuitComponent, CircuitState, TerminalSpec } from './types';
+import { handleToTerminalIndex, specOf } from './component-registry';
+import type {
+  BranchSpec,
+  CircuitComponent,
+  CircuitState,
+  ComponentSpec,
+  TerminalSpec,
+} from './types';
 
 // Converts a circuit (components + wires) into an electrical graph:
 // terminals joined by wires collapse into nodes, and each branch of a
@@ -78,11 +79,32 @@ export { UnionFind };
 const terminalKey = (componentId: string, terminal: string) =>
   `${componentId}.${terminal}`;
 
+/** Branches in use: the first mode whose terminals are all wired, else all. */
+const pickBranches = (spec: ComponentSpec, wired: boolean[]) => {
+  const mode = spec.modes?.find((m) => m.whenWired.every((i) => wired[i]));
+  return mode ? mode.branches : spec.branches.map((b) => b.id);
+};
+
+/** Share of the component value a branch carries (1 for whole parts). */
+const branchShare = (
+  spec: ComponentSpec,
+  branch: BranchSpec,
+  params: Record<string, number>,
+) => {
+  if (!branch.share) return 1;
+  const field = spec.fields.find((f) => f.key === branch.share!.param);
+  const raw =
+    params[branch.share.param] ??
+    (typeof field?.default === 'number' ? field.default : 0.5);
+  const share = Math.min(1, Math.max(0, raw));
+  return branch.share.invert ? 1 - share : share;
+};
+
 export const parseCircuit = (state: CircuitState): ParsedCircuit => {
   const uf = new UnionFind();
   const componentsById = new Map(state.components.map((c) => [c.id, c]));
   const terminalsOf = (component: CircuitComponent) =>
-    resolveTerminals(component.kind, component.terminals);
+    specOf(component).terminals;
   const wireCounts = new Map<string, number>();
   const invalidWires: string[] = [];
 
@@ -126,7 +148,7 @@ export const parseCircuit = (state: CircuitState): ParsedCircuit => {
   const terminals: ParsedTerminal[] = [];
 
   for (const component of state.components) {
-    const spec = getComponentSpec(component.kind);
+    const spec = specOf(component);
     const specTerminals = terminalsOf(component);
     const keys = specTerminals.map((t) => terminalKey(component.id, t.id));
     const counts = keys.map((key) => wireCounts.get(key) ?? 0);
@@ -140,15 +162,16 @@ export const parseCircuit = (state: CircuitState): ParsedCircuit => {
       }),
     );
 
-    const branchIds = spec.pickBranches
-      ? spec.pickBranches(counts.map((count) => count > 0))
-      : spec.branches.map((b) => b.id);
+    const branchIds = pickBranches(
+      spec,
+      counts.map((count) => count > 0),
+    );
     const multiBranch = spec.branches.length > 1;
 
     for (const branch of spec.branches) {
       if (!branchIds.includes(branch.id)) continue;
       const [a, b] = branch.between;
-      const share = branch.valueShare?.(component.params ?? {}) ?? 1;
+      const share = branchShare(spec, branch, component.params ?? {});
       elements.push({
         id: multiBranch ? `${component.id}:${branch.id}` : component.id,
         label: multiBranch

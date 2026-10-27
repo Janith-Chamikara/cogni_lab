@@ -56,6 +56,7 @@ import {
 } from "@/components/student/student-equipment-sidebar";
 import { WIRE_COLORS } from "@/components/lab/circuit-canvas/constants";
 import { CircuitDebugToggle } from "@/components/lab/circuit-debug/circuit-debug-toggle";
+import { InstructorContactCard } from "@/components/student/instructor-contact-card";
 import { usePersistentFlag } from "@/hooks/use-persistent-flag";
 import { editorRootClass, useFocusMode } from "@/hooks/use-focus-mode";
 import {
@@ -745,6 +746,20 @@ export function StudentLabEditor({ lab }: StudentLabEditorProps) {
                   when your circuit is ready.
                 </p>
               </section>
+
+              {/* Instructor */}
+              {lab.instructor && (
+                <section>
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Instructor
+                  </h3>
+                  <InstructorContactCard
+                    compact
+                    instructor={lab.instructor}
+                    emailSubject={`Question about ${lab.labName}`}
+                  />
+                </section>
+              )}
             </div>
           </aside>
         )}

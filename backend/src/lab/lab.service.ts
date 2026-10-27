@@ -17,7 +17,7 @@ import {
   buildReferenceCircuit,
   buildRequiredComponents,
   DEFAULT_CIRCUIT_RULES,
-  describeTerminals,
+  describeEquipmentComponent,
   InvalidCircuitRulesError,
   normalizeCircuitRules,
   readStoredCircuitRules,
@@ -104,6 +104,7 @@ export class LabService {
             id: true,
             fullName: true,
             email: true,
+            university: true,
           },
         },
         module: {
@@ -136,6 +137,7 @@ export class LabService {
             id: true,
             fullName: true,
             email: true,
+            university: true,
           },
         },
         module: {
@@ -189,11 +191,12 @@ export class LabService {
       labEquipments: lab.labEquipments.map((placement, index) => ({
         ...placement,
         componentLabel: required[index].label,
-        // Named connection points (e.g. + and −) the canvas draws as handles.
-        // Kept on the equipment so canvas nodes copied from it have them.
+        // How the part behaves and the named connection points (e.g. + and
+        // −) the canvas draws as handles. Kept on the equipment so canvas
+        // nodes copied from it have them.
         equipment: {
           ...placement.equipment,
-          terminals: describeTerminals(
+          ...describeEquipmentComponent(
             placement.equipment,
             placement.configJson,
           ),

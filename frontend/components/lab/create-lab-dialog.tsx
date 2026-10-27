@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  FormDescription,
   Form,
   FormControl,
   FormField,
@@ -65,7 +66,7 @@ export function CreateLabDialog({
   const form = useForm<CreateLabStep1Values>({
     resolver: zodResolver(createLabStep1Schema),
     defaultValues: {
-      status: "ACTIVE",
+      status: "DRAFT",
       category: "",
       labName: "",
       createdAt: new Date().toISOString().split("T")[0],
@@ -85,6 +86,7 @@ export function CreateLabDialog({
       labName: values.labName,
       description: values.description,
       category: values.category,
+      publishStatus: values.status,
     });
 
     setIsSubmitting(false);
@@ -127,11 +129,17 @@ export function CreateLabDialog({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="ACTIVE">Active</SelectItem>
                         <SelectItem value="DRAFT">Draft</SelectItem>
+                        {/* A new lab is empty; publish it from the editor. */}
+                        <SelectItem value="PUBLISHED" disabled>
+                          Published (from the editor)
+                        </SelectItem>
                         <SelectItem value="ARCHIVED">Archived</SelectItem>
                       </SelectContent>
                     </Select>
+                    <FormDescription>
+                      Students only see published labs.
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

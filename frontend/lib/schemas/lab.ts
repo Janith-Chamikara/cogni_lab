@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createLabStep1Schema = z.object({
-  status: z.enum(["ACTIVE", "DRAFT", "ARCHIVED"]),
+  status: z.enum(["DRAFT", "PUBLISHED", "ARCHIVED"]),
   category: z.string().min(1, "Category is required"),
   labName: z.string().min(1, "Lab name is required"),
   createdAt: z.string().optional(),

@@ -61,6 +61,9 @@ export type CreateModulePayload = {
 // Lab types
 export type LabStatus = "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED";
 
+/** Who can see a lab: students only see PUBLISHED labs. */
+export type LabPublishStatus = "DRAFT" | "PUBLISHED" | "ARCHIVED";
+
 export type EquipmentPlacement = {
   id?: string;
   equipmentId: string;
@@ -104,6 +107,23 @@ export type LabInstructor = {
   university?: string | null;
 };
 
+/** An instructor as listed to students, with their follow state. */
+export type InstructorSummary = LabInstructor & {
+  followerCount: number;
+  labCount: number;
+  isFollowing: boolean;
+};
+
+export type InstructorProfile = InstructorSummary & {
+  labs: Lab[];
+};
+
+export type FollowStatus = {
+  instructorId: string;
+  following: boolean;
+  followerCount: number;
+};
+
 export type Lab = {
   id: string;
   instructorId: string;
@@ -115,6 +135,7 @@ export type Lab = {
   toleranceUnit?: string | null;
   circuitRulesJson?: CircuitRules | null;
   completionStatus: LabStatus;
+  publishStatus: LabPublishStatus;
   createdAt: string;
   updatedAt: string;
   instructor?: LabInstructor;
@@ -138,6 +159,8 @@ export type CreateLabPayload = {
   labName: string;
   description?: string;
   category?: string;
+  /** Defaults to DRAFT on the server. */
+  publishStatus?: LabPublishStatus;
   toleranceMin?: number;
   toleranceMax?: number;
   toleranceUnit?: string;
@@ -393,6 +416,24 @@ export type SubmitAttemptResult = {
 };
 
 /** A student's result for one lab, based on their best attempt. */
+/** A student's saved, unsubmitted work on a lab. */
+export type LabDraft = {
+  labId: string;
+  /** Same shape as a submission's circuit. */
+  circuit: unknown;
+  currentStepIndex: number;
+  updatedAt: string;
+};
+
+export type LabDraftSummary = {
+  labId: string;
+  updatedAt: string;
+};
+
+export type SaveLabDraftPayload = StudentCircuitPayload & {
+  currentStepIndex: number;
+};
+
 export type LabAttemptSummary = {
   labId: string;
   attemptCount: number;

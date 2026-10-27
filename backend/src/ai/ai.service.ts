@@ -21,6 +21,7 @@ import {
   UI_GUIDANCE_TOOL,
   type GuidancePlan,
 } from './ai-guidance';
+import type { LabActor } from '../lab/lab.service';
 
 type ToolCall = {
   id: string;
@@ -41,14 +42,14 @@ export class AiService {
 
   constructor(private readonly tools: AiToolsService) {}
 
-  async chat(request: AiChatRequest) {
+  async chat(request: AiChatRequest, viewer: LabActor) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey)
       throw new ServiceUnavailableException(
         'The lab assistant is not configured yet. Please contact your instructor.',
       );
     const signal = AbortSignal.timeout(60000);
-    const prepared = await this.tools.prepare(request.context);
+    const prepared = await this.tools.prepare(request.context, viewer);
     const screen = request.context.screen;
     if (
       screen?.targets.length &&
@@ -319,13 +320,13 @@ export class AiService {
    * validated again here, so the model only sees server-side evidence (never
    * a result supplied by the browser). One model call, no tools.
    */
-  async progressFeedback(context: AiContext) {
+  async progressFeedback(context: AiContext, viewer: LabActor) {
     const apiKey = process.env.OPENROUTER_API_KEY;
     if (!apiKey)
       throw new ServiceUnavailableException(
         'AI feedback is not configured yet.',
       );
-    const prepared = await this.tools.prepare(context);
+    const prepared = await this.tools.prepare(context, viewer);
     const inspection = record(await prepared.execute('inspect_workspace', {}));
     const validation = record(inspection.validation);
     const signal = AbortSignal.timeout(30000);

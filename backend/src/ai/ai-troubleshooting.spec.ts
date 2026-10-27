@@ -2,6 +2,13 @@ import { workspaceIssueGuidance, type ScreenContext } from './ai-guidance';
 import type { AiChatRequest } from './ai-request';
 import { AiService } from './ai.service';
 import type { AiToolsService } from './ai-tools.service';
+import type { LabActor } from '../lab/lab.service';
+
+const viewer: LabActor = {
+  userId: 'student-1',
+  isInstructor: false,
+  isAdmin: false,
+};
 
 const reason = 'LED1 is reversed: its anode must face the + side of the supply';
 const inspection = {
@@ -128,6 +135,7 @@ describe('AiService troubleshooting without a model guidance call', () => {
     return {
       service: new AiService(tools as unknown as AiToolsService),
       execute,
+      prepare: tools.prepare,
     };
   };
 
@@ -142,8 +150,9 @@ describe('AiService troubleshooting without a model guidance call', () => {
   });
 
   it('returns a validated circle and short explanation when the model replies only in text', async () => {
-    const { service, execute } = makeService();
-    const result = await service.chat(request);
+    const { service, execute, prepare } = makeService();
+    const result = await service.chat(request, viewer);
+    expect(prepare).toHaveBeenCalledWith(request.context, viewer);
     expect(execute).toHaveBeenCalledWith('inspect_workspace', {});
     expect(result.guidance).toEqual(workspaceIssueGuidance(inspection, screen));
     expect(result.reply).toContain(reason);
@@ -153,10 +162,13 @@ describe('AiService troubleshooting without a model guidance call', () => {
 
   it('does not add circuit annotations to ordinary learning questions', async () => {
     const { service, execute } = makeService();
-    const result = await service.chat({
-      ...request,
-      messages: [{ role: 'user', content: 'Explain what an LED does' }],
-    });
+    const result = await service.chat(
+      {
+        ...request,
+        messages: [{ role: 'user', content: 'Explain what an LED does' }],
+      },
+      viewer,
+    );
     expect(execute).not.toHaveBeenCalled();
     expect(result.guidance).toBeUndefined();
   });
@@ -169,10 +181,13 @@ describe('AiService troubleshooting without a model guidance call', () => {
     'Troubleshoot my circuit',
   ])('returns verified visual guidance for "%s"', async (content) => {
     const { service, execute } = makeService();
-    const result = await service.chat({
-      ...request,
-      messages: [{ role: 'user', content }],
-    });
+    const result = await service.chat(
+      {
+        ...request,
+        messages: [{ role: 'user', content }],
+      },
+      viewer,
+    );
     expect(execute).toHaveBeenCalledWith('inspect_workspace', {});
     expect(result.guidance).toEqual(workspaceIssueGuidance(inspection, screen));
   });
@@ -184,10 +199,13 @@ describe('AiService troubleshooting without a model guidance call', () => {
     'Explain circuit errors',
   ])('does not force error marking for "%s"', async (content) => {
     const { service, execute } = makeService();
-    const result = await service.chat({
-      ...request,
-      messages: [{ role: 'user', content }],
-    });
+    const result = await service.chat(
+      {
+        ...request,
+        messages: [{ role: 'user', content }],
+      },
+      viewer,
+    );
     expect(execute).not.toHaveBeenCalled();
     expect(result.guidance).toBeUndefined();
   });
@@ -235,7 +253,7 @@ describe('AiService troubleshooting without a model guidance call', () => {
         })
         .mockResolvedValueOnce(textResponse);
       const { service, execute } = makeService();
-      const result = await service.chat(request);
+      const result = await service.chat(request, viewer);
       expect(result.guidance).toEqual(plan);
       expect(execute).toHaveBeenCalledTimes(1);
     },

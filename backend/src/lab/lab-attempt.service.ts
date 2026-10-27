@@ -55,57 +55,55 @@ export const canDebugCircuits = (actor?: LabActor | null) =>
   !!actor?.isInstructor ||
   !!actor?.isAdmin;
 
+/**
+ * Normalise a student circuit request body. Nest has no global ValidationPipe in this
+ * project, so the shape is enforced here.
+ */
+export const sanitizeStudentCircuit = (body: StudentCircuitDto) => {
+  const raw = asObject(body);
+  const components = asArray(raw.components).map(asObject);
+  const connections = asArray(raw.connections).map(asObject);
+
+  if (components.some((c) => !asString(c.id) || !asString(c.equipmentId))) {
+    throw new BadRequestException('Each component needs an id and equipmentId');
+  }
+  if (
+    connections.some(
+      (c) => !asString(c.sourceEquipmentId) || !asString(c.targetEquipmentId),
+    )
+  ) {
+    throw new BadRequestException(
+      'Each connection needs a sourceEquipmentId and targetEquipmentId',
+    );
+  }
+
+  return {
+    circuit: {
+      components: components.map((c) => ({
+        id: c.id as string,
+        equipmentId: c.equipmentId as string,
+        labEquipmentId: asString(c.labEquipmentId) ?? null,
+        positionX: typeof c.positionX === 'number' ? c.positionX : 0,
+        positionY: typeof c.positionY === 'number' ? c.positionY : 0,
+      })),
+      connections: connections.map((c) => ({
+        sourceEquipmentId: c.sourceEquipmentId as string,
+        targetEquipmentId: c.targetEquipmentId as string,
+        sourceHandle: asString(c.sourceHandle) ?? null,
+        targetHandle: asString(c.targetHandle) ?? null,
+        wireColor: asString(c.wireColor) ?? null,
+      })),
+    },
+    completedStepIds: asArray(raw.completedStepIds).filter(
+      (id): id is string => typeof id === 'string',
+    ),
+    actionLog: asArray(raw.actionLog).map(asObject),
+  };
+};
+
 @Injectable()
 export class LabAttemptService {
   constructor(private readonly prisma: PrismaService) {}
-
-  /**
-   * Normalise the request body. Nest has no global ValidationPipe in this
-   * project, so the shape is enforced here.
-   */
-  private sanitize(body: StudentCircuitDto) {
-    const raw = asObject(body);
-    const components = asArray(raw.components).map(asObject);
-    const connections = asArray(raw.connections).map(asObject);
-
-    if (components.some((c) => !asString(c.id) || !asString(c.equipmentId))) {
-      throw new BadRequestException(
-        'Each component needs an id and equipmentId',
-      );
-    }
-    if (
-      connections.some(
-        (c) => !asString(c.sourceEquipmentId) || !asString(c.targetEquipmentId),
-      )
-    ) {
-      throw new BadRequestException(
-        'Each connection needs a sourceEquipmentId and targetEquipmentId',
-      );
-    }
-
-    return {
-      circuit: {
-        components: components.map((c) => ({
-          id: c.id as string,
-          equipmentId: c.equipmentId as string,
-          labEquipmentId: asString(c.labEquipmentId) ?? null,
-          positionX: typeof c.positionX === 'number' ? c.positionX : 0,
-          positionY: typeof c.positionY === 'number' ? c.positionY : 0,
-        })),
-        connections: connections.map((c) => ({
-          sourceEquipmentId: c.sourceEquipmentId as string,
-          targetEquipmentId: c.targetEquipmentId as string,
-          sourceHandle: asString(c.sourceHandle) ?? null,
-          targetHandle: asString(c.targetHandle) ?? null,
-          wireColor: asString(c.wireColor) ?? null,
-        })),
-      },
-      completedStepIds: asArray(raw.completedStepIds).filter(
-        (id): id is string => typeof id === 'string',
-      ),
-      actionLog: asArray(raw.actionLog).map(asObject),
-    };
-  }
 
   private async loadLab(labId: string) {
     const lab = await this.prisma.labInstance.findUnique({
@@ -162,7 +160,7 @@ export class LabAttemptService {
    */
   async validate(labId: string, body: StudentCircuitDto, actor?: LabActor) {
     const lab = await this.loadLab(labId);
-    const { circuit } = this.sanitize(body);
+    const { circuit } = sanitizeStudentCircuit(body);
     const debug = asObject(body).debug === true && canDebugCircuits(actor);
     return this.evaluate(lab, circuit, debug);
   }
@@ -170,27 +168,32 @@ export class LabAttemptService {
   /** Validate and store a submission. Every submit creates a new attempt. */
   async submit(labId: string, userId: string, body: StudentCircuitDto) {
     const lab = await this.loadLab(labId);
-    const { circuit, completedStepIds, actionLog } = this.sanitize(body);
+    const { circuit, completedStepIds, actionLog } =
+      sanitizeStudentCircuit(body);
     const result = this.evaluate(lab, circuit);
 
-    const attempt = await this.prisma.labAttempt.create({
-      data: {
-        labId,
-        userId,
-        circuitStateJson: {
-          ...circuit,
-          completedStepIds,
-        } as Prisma.InputJsonValue,
-        actionLogJson:
-          actionLog.length > 0
-            ? (actionLog as Prisma.InputJsonValue)
-            : undefined,
-        validationResultJson: result as unknown as Prisma.InputJsonValue,
-        validationMode: result.mode,
-        score: result.score,
-        passed: result.passed,
-      },
-    });
+    // Submitting replaces the student's saved draft.
+    const [attempt] = await this.prisma.$transaction([
+      this.prisma.labAttempt.create({
+        data: {
+          labId,
+          userId,
+          circuitStateJson: {
+            ...circuit,
+            completedStepIds,
+          } as Prisma.InputJsonValue,
+          actionLogJson:
+            actionLog.length > 0
+              ? (actionLog as Prisma.InputJsonValue)
+              : undefined,
+          validationResultJson: result as unknown as Prisma.InputJsonValue,
+          validationMode: result.mode,
+          score: result.score,
+          passed: result.passed,
+        },
+      }),
+      this.prisma.labDraft.deleteMany({ where: { labId, userId } }),
+    ]);
 
     const { bestAttempt } = await this.findMine(labId, userId);
     return { attempt, result, bestAttempt };

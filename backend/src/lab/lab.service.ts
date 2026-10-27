@@ -12,6 +12,7 @@ import {
   UpdateLabEquipmentsDto,
   UpdateLabStepsDto,
   UpdateWireConnectionsDto,
+  LabPublishStatus,
 } from './dto/lab.dto';
 import {
   buildReferenceCircuit,
@@ -29,6 +30,18 @@ export type LabActor = {
   isInstructor: boolean;
   isAdmin: boolean;
 };
+
+/** Instructors and admins see every lab; everyone else only published ones. */
+export const canSeeUnpublishedLabs = (actor?: LabActor | null) =>
+  !!actor?.isInstructor || !!actor?.isAdmin;
+
+const PUBLISH_STATUSES = Object.values(LabPublishStatus) as string[];
+
+/** A valid publish status, or undefined. */
+export const parsePublishStatus = (value: unknown) =>
+  typeof value === 'string' && PUBLISH_STATUSES.includes(value)
+    ? (value as LabPublishStatus)
+    : undefined;
 
 export type LabStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED';
 
@@ -52,9 +65,23 @@ export class LabService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(instructorId: string, dto: CreateLabDto) {
+    const publishStatus =
+      parsePublishStatus(dto.publishStatus) ?? LabPublishStatus.DRAFT;
+    // Same rule as publishing later: a lab needs a part or a step.
+    if (
+      publishStatus === LabPublishStatus.PUBLISHED &&
+      !dto.equipments?.length &&
+      !dto.steps?.length
+    ) {
+      throw new BadRequestException(
+        'Add at least one part or step before publishing this lab',
+      );
+    }
+
     const lab = await this.prisma.labInstance.create({
       data: {
         instructorId,
+        publishStatus,
         moduleId: dto.moduleId,
         labName: dto.labName,
         description: dto.description,
@@ -96,8 +123,10 @@ export class LabService {
     return this.findOne(lab.id);
   }
 
+  /** Every published lab (the student lab list). */
   async findAll() {
     return this.prisma.labInstance.findMany({
+      where: { publishStatus: LabPublishStatus.PUBLISHED },
       include: {
         instructor: {
           select: {
@@ -389,6 +418,77 @@ export class LabService {
 
     return this.prisma.labInstance.delete({
       where: { id },
+    });
+  }
+
+  /**
+   * Throws 404 unless the actor may open this lab: students only see
+   * published labs, so an unpublished lab looks like it does not exist.
+   */
+  async assertVisibleTo(id: string, actor: LabActor) {
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      select: { publishStatus: true },
+    });
+
+    if (
+      !lab ||
+      (lab.publishStatus !== 'PUBLISHED' && !canSeeUnpublishedLabs(actor))
+    ) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+  }
+
+  async findOneForViewer(id: string, actor: LabActor) {
+    await this.assertVisibleTo(id, actor);
+    return this.findOne(id);
+  }
+
+  /**
+   * Publish, unpublish (back to draft) or archive a lab. Only its instructor
+   * or an admin may; publishing needs at least one part or step.
+   */
+  async updatePublishStatus(id: string, actor: LabActor, status: unknown) {
+    const publishStatus = parsePublishStatus(status);
+    if (!publishStatus) {
+      throw new BadRequestException(
+        `publishStatus must be one of ${PUBLISH_STATUSES.join(', ')}`,
+      );
+    }
+
+    const lab = await this.prisma.labInstance.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        instructorId: true,
+        _count: { select: { labEquipments: true, experimentSteps: true } },
+      },
+    });
+
+    if (!lab) {
+      throw new NotFoundException(`Lab with ID ${id} not found`);
+    }
+
+    this.assertCanManage(
+      lab,
+      actor,
+      'Only the instructor who owns this lab can publish it',
+    );
+
+    if (
+      publishStatus === LabPublishStatus.PUBLISHED &&
+      lab._count.labEquipments === 0 &&
+      lab._count.experimentSteps === 0
+    ) {
+      throw new BadRequestException(
+        'Add at least one part or step before publishing this lab',
+      );
+    }
+
+    return this.prisma.labInstance.update({
+      where: { id },
+      data: { publishStatus },
+      select: { id: true, publishStatus: true },
     });
   }
 

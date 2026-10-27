@@ -10,9 +10,10 @@ import {
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
-export enum LabStatus {
-  ACTIVE = 'ACTIVE',
+/** Students only see PUBLISHED labs. */
+export enum LabPublishStatus {
   DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
   ARCHIVED = 'ARCHIVED',
 }
 
@@ -69,6 +70,11 @@ export class CreateLabDto {
   @IsString()
   moduleId: string;
 
+  /** Defaults to DRAFT. */
+  @IsOptional()
+  @IsEnum(LabPublishStatus)
+  publishStatus?: LabPublishStatus;
+
   @IsString()
   labName: string;
 
@@ -105,6 +111,11 @@ export class CreateLabDto {
   @ValidateNested({ each: true })
   @Type(() => ExperimentStepDto)
   steps?: ExperimentStepDto[];
+}
+
+export class UpdatePublishStatusDto {
+  @IsEnum(LabPublishStatus)
+  publishStatus: LabPublishStatus;
 }
 
 export class UpdateLabDto {
@@ -253,4 +264,11 @@ export class StudentCircuitDto {
   @IsOptional()
   @IsBoolean()
   debug?: boolean;
+}
+
+/** A student's unsubmitted circuit plus the step they were on. */
+export class SaveLabDraftDto extends StudentCircuitDto {
+  @IsOptional()
+  @IsNumber()
+  currentStepIndex?: number;
 }

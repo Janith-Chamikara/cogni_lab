@@ -19,8 +19,20 @@ import {
   Clock,
   CheckCircle2,
   Wrench,
+  Trash2,
+  Pencil,
+  Globe,
+  FilePen,
+  Archive,
 } from "lucide-react";
-import { Lab, LabEquipment, LabStats, Module } from "@/lib/types";
+import {
+  Lab,
+  LabEquipment,
+  LabPublishStatus,
+  LabStats,
+  Module,
+} from "@/lib/types";
+import { deleteLab, getLabStats, updateLabPublishStatus } from "@/lib/actions";
 import { CreateLabEquipmentDialog } from "@/components/lab-equipment/create-lab-equipment-dialog";
 import { LabEquipmentCard } from "@/components/lab-equipment/lab-equipment-card";
 import { Button } from "@/components/ui/button";
@@ -46,8 +58,17 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { CreateLabDialog } from "@/components/lab/create-lab-dialog";
 
 type DashboardClientProps = {
@@ -56,6 +77,27 @@ type DashboardClientProps = {
   modules: Module[];
   initialEquipments: LabEquipment[];
   error?: string;
+};
+
+/** Shown on labs students cannot see yet. */
+const PUBLISH_BADGE: Record<
+  LabPublishStatus,
+  { color: string; label: string }
+> = {
+  DRAFT: {
+    color:
+      "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
+    label: "Draft",
+  },
+  PUBLISHED: {
+    color:
+      "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+    label: "Published",
+  },
+  ARCHIVED: {
+    color: "bg-muted text-muted-foreground border-border",
+    label: "Archived",
+  },
 };
 
 const STATUS_CONFIG: Record<
@@ -95,6 +137,11 @@ export function DashboardClient({
   const [equipmentSearchQuery, setEquipmentSearchQuery] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isCreateEquipmentOpen, setIsCreateEquipmentOpen] = useState(false);
+  const [labToDelete, setLabToDelete] = useState<Lab | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [updatingLabId, setUpdatingLabId] = useState<string | null>(null);
+  const [labActionError, setLabActionError] = useState<string | null>(null);
 
   const filteredLabs = labs.filter(
     (lab) =>
@@ -106,6 +153,54 @@ export function DashboardClient({
     setLabs([newLab, ...labs]);
     setStats({ ...stats, totalLabs: stats.totalLabs + 1 });
     setIsCreateOpen(false);
+  };
+
+  const openDeleteDialog = (lab: Lab) => {
+    setDeleteError(null);
+    setLabToDelete(lab);
+  };
+
+  const handleDeleteLab = async () => {
+    if (!labToDelete) return;
+
+    setIsDeleting(true);
+    setDeleteError(null);
+    const result = await deleteLab(labToDelete.id);
+
+    if (result.error) {
+      setDeleteError(result.error);
+      setIsDeleting(false);
+      return;
+    }
+
+    setLabs((prev) => prev.filter((lab) => lab.id !== labToDelete.id));
+    // The lab's submissions are deleted with it, so reload the stats.
+    const statsResult = await getLabStats();
+    setStats(
+      statsResult.data ?? { ...stats, totalLabs: stats.totalLabs - 1 },
+    );
+    setIsDeleting(false);
+    setLabToDelete(null);
+  };
+
+  const handlePublishStatus = async (lab: Lab, next: LabPublishStatus) => {
+    setUpdatingLabId(lab.id);
+    setLabActionError(null);
+    const result = await updateLabPublishStatus(lab.id, next);
+    setUpdatingLabId(null);
+
+    if (result.error || !result.data) {
+      setLabActionError(
+        `${lab.labName}: ${result.error ?? "Could not change the status."}`,
+      );
+      return;
+    }
+    const { publishStatus } = result.data;
+    setLabs((prev) =>
+      prev.map((item) =>
+        item.id === lab.id ? { ...item, publishStatus } : item,
+      ),
+    );
   };
 
   const handleEquipmentCreated = (equipment: LabEquipment) => {
@@ -296,6 +391,14 @@ export function DashboardClient({
                 </div>
               </CardHeader>
               <CardContent className="p-0">
+                {labActionError && (
+                  <p
+                    role="alert"
+                    className="mx-6 mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                  >
+                    {labActionError}
+                  </p>
+                )}
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -339,6 +442,11 @@ export function DashboardClient({
                       filteredLabs.map((lab, index) => {
                         const statusConfig =
                           STATUS_CONFIG[lab.completionStatus];
+                        // Same rule as the server: a part or a step.
+                        const canPublish =
+                          (lab._count?.labEquipments ?? 0) > 0 ||
+                          (lab._count?.experimentSteps ?? 0) > 0;
+                        const isUpdating = updatingLabId === lab.id;
                         return (
                           <TableRow
                             key={lab.id}
@@ -376,13 +484,26 @@ export function DashboardClient({
                               </Badge>
                             </TableCell>
                             <TableCell>
-                              <Badge
-                                variant="outline"
-                                className={`gap-1 ${statusConfig.color}`}
-                              >
-                                {statusConfig.icon}
-                                {statusConfig.label}
-                              </Badge>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {lab.publishStatus !== "PUBLISHED" && (
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      PUBLISH_BADGE[lab.publishStatus].color
+                                    }
+                                    title="Students cannot see this lab until you publish it"
+                                  >
+                                    {PUBLISH_BADGE[lab.publishStatus].label}
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className={`gap-1 ${statusConfig.color}`}
+                                >
+                                  {statusConfig.icon}
+                                  {statusConfig.label}
+                                </Badge>
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
@@ -398,7 +519,11 @@ export function DashboardClient({
                               {format(new Date(lab.createdAt), "MMM d, yyyy")}
                             </TableCell>
                             <TableCell className="pr-6">
-                              <div className="flex items-center justify-end gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                              <div
+                                className={`flex items-center justify-end gap-1 transition-opacity group-hover:opacity-100 ${
+                                  isUpdating ? "opacity-100" : "opacity-0"
+                                }`}
+                              >
                                 <Link href={`/labs/${lab.id}`}>
                                   <Button
                                     variant="ghost"
@@ -408,22 +533,75 @@ export function DashboardClient({
                                     <Eye className="h-4 w-4" />
                                   </Button>
                                 </Link>
-                                <DropdownMenu>
+                                <DropdownMenu modal={false}>
                                   <DropdownMenuTrigger asChild>
                                     <Button
                                       variant="ghost"
                                       size="icon"
                                       className="h-8 w-8"
+                                      disabled={isUpdating}
+                                      aria-label={`Actions for ${lab.labName}`}
                                     >
                                       <MoreHorizontal className="h-4 w-4" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>Edit</DropdownMenuItem>
+                                    <DropdownMenuItem asChild>
+                                      <Link href={`/labs/${lab.id}`}>
+                                        <Pencil className="h-4 w-4" />
+                                        Edit
+                                      </Link>
+                                    </DropdownMenuItem>
                                     <DropdownMenuItem>
                                       Duplicate
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-destructive">
+                                    <DropdownMenuSeparator />
+                                    {lab.publishStatus !== "PUBLISHED" && (
+                                      <DropdownMenuItem
+                                        disabled={!canPublish}
+                                        title={
+                                          canPublish
+                                            ? undefined
+                                            : "Add at least one part or step in the editor first"
+                                        }
+                                        onSelect={() =>
+                                          handlePublishStatus(lab, "PUBLISHED")
+                                        }
+                                      >
+                                        <Globe className="h-4 w-4" />
+                                        {canPublish
+                                          ? "Publish"
+                                          : "Publish (add a part or step first)"}
+                                      </DropdownMenuItem>
+                                    )}
+                                    {lab.publishStatus !== "DRAFT" && (
+                                      <DropdownMenuItem
+                                        onSelect={() =>
+                                          handlePublishStatus(lab, "DRAFT")
+                                        }
+                                      >
+                                        <FilePen className="h-4 w-4" />
+                                        {lab.publishStatus === "PUBLISHED"
+                                          ? "Unpublish"
+                                          : "Move to draft"}
+                                      </DropdownMenuItem>
+                                    )}
+                                    {lab.publishStatus !== "ARCHIVED" && (
+                                      <DropdownMenuItem
+                                        onSelect={() =>
+                                          handlePublishStatus(lab, "ARCHIVED")
+                                        }
+                                      >
+                                        <Archive className="h-4 w-4" />
+                                        Archive
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      className="text-destructive"
+                                      onSelect={() => openDeleteDialog(lab)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
                                       Delete
                                     </DropdownMenuItem>
                                   </DropdownMenuContent>
@@ -466,14 +644,27 @@ export function DashboardClient({
                               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                                 <FlaskConical className="h-5 w-5 text-primary" />
                               </div>
-                              <Badge
-                                variant="outline"
-                                className={
-                                  STATUS_CONFIG[lab.completionStatus].color
-                                }
-                              >
-                                {STATUS_CONFIG[lab.completionStatus].label}
-                              </Badge>
+                              <div className="flex flex-wrap justify-end gap-1.5">
+                                {lab.publishStatus !== "PUBLISHED" && (
+                                  <Badge
+                                    variant="outline"
+                                    className={
+                                      PUBLISH_BADGE[lab.publishStatus].color
+                                    }
+                                    title="Students cannot see this lab until you publish it"
+                                  >
+                                    {PUBLISH_BADGE[lab.publishStatus].label}
+                                  </Badge>
+                                )}
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    STATUS_CONFIG[lab.completionStatus].color
+                                  }
+                                >
+                                  {STATUS_CONFIG[lab.completionStatus].label}
+                                </Badge>
+                              </div>
                             </div>
                             <CardTitle className="mt-3 text-lg group-hover:text-primary">
                               {lab.labName}
@@ -654,6 +845,44 @@ export function DashboardClient({
         onOpenChange={setIsCreateEquipmentOpen}
         onCreated={handleEquipmentCreated}
       />
+
+      {/* Delete Lab Confirmation */}
+      <Dialog
+        open={!!labToDelete}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setLabToDelete(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete laboratory?</DialogTitle>
+            <DialogDescription>
+              &quot;{labToDelete?.labName}&quot; will be permanently deleted,
+              together with its equipment, wiring, steps and all student
+              submissions. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p className="text-sm text-destructive">{deleteError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLabToDelete(null)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteLab}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
